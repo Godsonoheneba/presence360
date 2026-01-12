@@ -1,0 +1,190 @@
+{
+  "info": {
+    "name": "Presence360 Tenant API",
+    "_postman_id": "b932c6da-6a8f-4e7b-8d30-2d9b6b5a7f2b",
+    "description": "Tenant API collection (derived from /openapi.json).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{tenant_api_base_url}}/healthz"
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": "{{tenant_api_base_url}}/healthz"
+          },
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"status\": \"ok\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Auth Login (placeholder)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-Tenant-Slug", "value": "{{tenant_slug}}" }
+        ],
+        "url": "{{tenant_api_base_url}}/v1/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\":\"admin@grace.local\",\"password\":\"password\"}"
+        }
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "url": "{{tenant_api_base_url}}/v1/auth/login"
+          },
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"status\": \"ok\",\n  \"details\": {\n    \"email\": \"admin@grace.local\"\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "Get Me",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{tenant_dev_token}}" },
+          { "key": "X-Tenant-Slug", "value": "{{tenant_slug}}" }
+        ],
+        "url": "{{tenant_api_base_url}}/v1/me"
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": "{{tenant_api_base_url}}/v1/me"
+          },
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"user\": \"placeholder\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Tenant Info",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{tenant_dev_token}}" },
+          { "key": "X-Tenant-Slug", "value": "{{tenant_slug}}" }
+        ],
+        "url": "{{tenant_api_base_url}}/v1/tenant-info"
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": "{{tenant_api_base_url}}/v1/tenant-info"
+          },
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"slug\": \"grace\",\n  \"db_name\": \"tenant_<uuid>\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Create Template",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{tenant_dev_token}}" },
+          { "key": "X-Tenant-Slug", "value": "{{tenant_slug}}" }
+        ],
+        "url": "{{tenant_api_base_url}}/v1/templates",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"welcome_default\",\"channel\":\"sms\",\"body\":\"Welcome to church, {first_name}!\",\"variables_json\":[\"first_name\"],\"active\":true}"
+        }
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "url": "{{tenant_api_base_url}}/v1/templates"
+          },
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"id\": \"<uuid>\",\n  \"name\": \"welcome_default\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Send Message",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{tenant_dev_token}}" },
+          { "key": "X-Tenant-Slug", "value": "{{tenant_slug}}" },
+          { "key": "Idempotency-Key", "value": "msg-001" }
+        ],
+        "url": "{{tenant_api_base_url}}/v1/messages/send",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"to_phone\":\"+233000000000\",\"body\":\"Test SMS from Presence360\"}"
+        }
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "url": "{{tenant_api_base_url}}/v1/messages/send"
+          },
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"message_log_id\": \"<uuid>\",\n  \"status\": \"queued\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Message Logs",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{tenant_dev_token}}" },
+          { "key": "X-Tenant-Slug", "value": "{{tenant_slug}}" }
+        ],
+        "url": "{{tenant_api_base_url}}/v1/messages/logs?limit=10"
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": "{{tenant_api_base_url}}/v1/messages/logs?limit=10"
+          },
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"items\": [\n    {\n      \"id\": \"<uuid>\",\n      \"status\": \"sent\"\n    }\n  ]\n}"
+        }
+      ]
+    }
+  ]
+}

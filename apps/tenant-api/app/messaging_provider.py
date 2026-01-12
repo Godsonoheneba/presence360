@@ -130,6 +130,8 @@ def _sanitize_response(response: httpx.Response) -> dict:
 
 def get_messaging_provider() -> MessagingProvider:
     settings = get_settings()
+    if settings.provider_mode != "live":
+        return MockMessagingProvider()
     if settings.messaging_mode == "mnotify":
         return MNotifyProvider(
             base_url=settings.mnotify_base_url,

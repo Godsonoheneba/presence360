@@ -347,7 +347,11 @@ def send_message_job(tenant_slug: str, message_log_id: str, body: str | None = N
         provider = get_messaging_provider()
         sender_id = get_config_value(session, "mnotify_sender_id")
         api_key = get_secret_config_value(session, "mnotify_api_key") or ""
-        if settings.messaging_mode == "mnotify" and not api_key:
+        if (
+            settings.provider_mode == "live"
+            and settings.messaging_mode == "mnotify"
+            and not api_key
+        ):
             log.status = "failed"
             log.error_code = "missing_api_key"
             session.commit()

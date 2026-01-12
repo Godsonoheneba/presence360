@@ -46,8 +46,9 @@ def _load_env() -> None:
         ).render_as_string(hide_password=False)
 
     os.environ.setdefault("AUTH_DEV_SUPER_TOKEN", "dev-super")
-    os.environ.setdefault("SECRET_STORE_BACKEND", "file")
-    os.environ.setdefault("SECRET_STORE_PATH", ".secrets/tenant_db.json")
+    os.environ["SECRET_STORE_BACKEND"] = "file"
+    os.environ["SECRET_STORE_PATH"] = ".secrets/tenant_db.json"
+    os.environ.setdefault("REKOGNITION_MODE", "mock")
 
 
 _load_env()

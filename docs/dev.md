@@ -3,7 +3,7 @@
 ## Start the stack
 ```bash
 cp .env.example .env
-make up
+make dev-up
 ```
 
 ## Install web dependencies (for local lint/test)
@@ -14,8 +14,17 @@ npm --prefix apps/web-control-plane install
 
 ## Run migrations
 ```bash
-make migrate-control
-make migrate-tenant
+make dev-migrate
+```
+
+## Seed dev data
+```bash
+make dev-seed
+```
+
+## Smoke test
+```bash
+make dev-smoke
 ```
 
 ## Lint and tests
@@ -33,4 +42,4 @@ make test
 - Redis: localhost:6379
 
 ## Local secrets
-- Dev tenant DB credentials are stored in `./.secrets/tenant_db.json` (gitignored).
+- Dev secrets live at `./secrets/dev-secrets.json` (gitignored).

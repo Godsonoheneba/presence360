@@ -1,7 +1,9 @@
-.PHONY: up down logs migrate-control migrate-tenant lint test audit backup-list restore-checklist
+.PHONY: up down logs migrate-control migrate-tenant lint test audit backup-list restore-checklist dev-up dev-migrate dev-seed dev-smoke
 
 up:
 	docker compose up -d --build
+
+dev-up: up
 
 down:
 	docker compose down
@@ -14,6 +16,8 @@ migrate-control:
 
 migrate-tenant:
 	docker compose run --rm tenant-api alembic upgrade head
+
+dev-migrate: migrate-control migrate-tenant
 
 lint:
 	ruff check apps/control-plane-api apps/tenant-api
@@ -33,6 +37,12 @@ audit:
 	@command -v pip-audit >/dev/null 2>&1 && pip-audit || echo "pip-audit not installed; skipping"
 	@command -v npm >/dev/null 2>&1 && npm --prefix apps/web-tenant audit --audit-level=high || echo "npm audit skipped/failed"
 	@command -v npm >/dev/null 2>&1 && npm --prefix apps/web-control-plane audit --audit-level=high || echo "npm audit skipped/failed"
+
+dev-seed:
+	./scripts/dev_seed.sh
+
+dev-smoke:
+	./scripts/dev_smoke.sh
 
 backup-list:
 	./scripts/list_do_backups.sh

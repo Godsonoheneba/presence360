@@ -169,8 +169,9 @@ def _cached_provider(
 
 def get_face_provider(collection_ref: str) -> FaceProvider:
     settings = get_settings()
+    mode = settings.rekognition_mode if settings.provider_mode == "live" else "mock"
     return _cached_provider(
-        settings.rekognition_mode,
+        mode,
         collection_ref,
         settings.mock_face_confidence,
         settings.rekognition_region,

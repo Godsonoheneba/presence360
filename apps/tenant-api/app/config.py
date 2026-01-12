@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     secret_store_backend: str = "env"
     secret_store_path: str = ".secrets/tenant_db.json"
     tenant_registry_cache_ttl_seconds: int = 30
+    provider_mode: str = "mock"
     rekognition_mode: str = "mock"
     rekognition_region: str = "us-east-1"
     mock_face_confidence: float = 99.0

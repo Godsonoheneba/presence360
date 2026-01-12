@@ -23,8 +23,8 @@ services:
       ENV: ${ENV}
       DATABASE_URL: ${CONTROL_PLANE_DATABASE_URL}
       POSTGRES_ADMIN_URL: ${POSTGRES_ADMIN_URL}
-      SECRET_STORE_BACKEND: ${SECRET_STORE_BACKEND:-env}
-      SECRET_STORE_PATH: ${SECRET_STORE_PATH:-/app/.secrets/tenant_db.json}
+      SECRET_STORE_BACKEND: file
+      SECRET_STORE_PATH: /run/secrets/dev-secrets.json
       TENANT_SECRET_TENANT_DB_PASSWORD: ${TENANT_SECRET_TENANT_DB_PASSWORD:-}
       REKOGNITION_MODE: ${REKOGNITION_MODE}
       REKOGNITION_REGION: ${REKOGNITION_REGION}
@@ -47,7 +47,7 @@ services:
       - postgres
       - redis
     volumes:
-      - ./.secrets:/app/.secrets
+      - ./secrets:/run/secrets
     ports:
       - "8001:8000"
 
@@ -60,11 +60,12 @@ services:
       REDIS_URL: ${REDIS_URL}
       CONTROL_PLANE_API_URL: ${CONTROL_PLANE_API_URL}
       CONTROL_PLANE_INTERNAL_TOKEN: ${CONTROL_PLANE_INTERNAL_TOKEN}
-      SECRET_STORE_BACKEND: ${SECRET_STORE_BACKEND:-env}
-      SECRET_STORE_PATH: ${SECRET_STORE_PATH:-/app/.secrets/tenant_db.json}
+      SECRET_STORE_BACKEND: file
+      SECRET_STORE_PATH: /run/secrets/dev-secrets.json
       TENANT_SECRET_MNOTIFY_API_KEY: ${TENANT_SECRET_MNOTIFY_API_KEY:-}
       TENANT_SECRET_TENANT_DB_PASSWORD: ${TENANT_SECRET_TENANT_DB_PASSWORD:-}
       TENANT_REGISTRY_CACHE_TTL_SECONDS: ${TENANT_REGISTRY_CACHE_TTL_SECONDS}
+      PROVIDER_MODE: ${PROVIDER_MODE:-mock}
       MESSAGING_MODE: ${MESSAGING_MODE:-mock}
       MNOTIFY_BASE_URL: ${MNOTIFY_BASE_URL}
       MNOTIFY_TIMEOUT_SECONDS: ${MNOTIFY_TIMEOUT_SECONDS}
@@ -94,7 +95,7 @@ services:
       - postgres
       - redis
     volumes:
-      - ./.secrets:/app/.secrets
+      - ./secrets:/run/secrets:ro
     ports:
       - "8000:8000"
 
@@ -106,11 +107,12 @@ services:
       REDIS_URL: ${REDIS_URL}
       CONTROL_PLANE_API_URL: ${CONTROL_PLANE_API_URL}
       CONTROL_PLANE_INTERNAL_TOKEN: ${CONTROL_PLANE_INTERNAL_TOKEN}
-      SECRET_STORE_BACKEND: ${SECRET_STORE_BACKEND:-env}
-      SECRET_STORE_PATH: ${SECRET_STORE_PATH:-/app/.secrets/tenant_db.json}
+      SECRET_STORE_BACKEND: file
+      SECRET_STORE_PATH: /run/secrets/dev-secrets.json
       TENANT_SECRET_MNOTIFY_API_KEY: ${TENANT_SECRET_MNOTIFY_API_KEY:-}
       TENANT_SECRET_TENANT_DB_PASSWORD: ${TENANT_SECRET_TENANT_DB_PASSWORD:-}
       TENANT_REGISTRY_CACHE_TTL_SECONDS: ${TENANT_REGISTRY_CACHE_TTL_SECONDS}
+      PROVIDER_MODE: ${PROVIDER_MODE:-mock}
       MESSAGING_MODE: ${MESSAGING_MODE:-mock}
       MNOTIFY_BASE_URL: ${MNOTIFY_BASE_URL}
       MNOTIFY_TIMEOUT_SECONDS: ${MNOTIFY_TIMEOUT_SECONDS}
@@ -132,7 +134,7 @@ services:
       - redis
       - tenant-api
     volumes:
-      - ./.secrets:/app/.secrets
+      - ./secrets:/run/secrets:ro
 
   web-tenant:
     build: ./apps/web-tenant

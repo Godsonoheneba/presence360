@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -19,9 +20,14 @@ class SecretStore(Protocol):
 @dataclass
 class FileSecretStore:
     path: str
+    allow_missing_in_dev: bool = False
+    fallback_env: "EnvSecretStore | None" = None
 
     def get(self, secret_ref: str) -> str:
-        if not os.path.exists(self.path):
+        if not os.path.exists(self.path) or not os.path.isfile(self.path):
+            if self.allow_missing_in_dev and self.fallback_env is not None:
+                _warn_missing_secret_store(self.path)
+                return self.fallback_env.get(secret_ref)
             raise SecretStoreError("Secret store file not found", status_code=503)
         with open(self.path, "r", encoding="utf-8") as handle:
             try:
@@ -99,3 +105,18 @@ def _extract_secret_value(value: object) -> str:
             if key in value:
                 return str(value[key])
     raise SecretStoreError("Secret value is invalid", status_code=500)
+
+
+_missing_secret_store_warned = False
+_logger = logging.getLogger(__name__)
+
+
+def _warn_missing_secret_store(path: str) -> None:
+    global _missing_secret_store_warned
+    if _missing_secret_store_warned:
+        return
+    _missing_secret_store_warned = True
+    _logger.warning(
+        "secret_store_missing_file_fallback",
+        extra={"path": path, "fallback": "env", "env": "dev"},
+    )

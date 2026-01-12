@@ -77,7 +77,12 @@ def get_secret_store() -> SecretStore:
     settings = get_settings()
     backend = settings.secret_store_backend.lower()
     if backend == "file":
-        return FileSecretStore(settings.secret_store_path)
+        env_store = EnvSecretStore()
+        return FileSecretStore(
+            settings.secret_store_path,
+            allow_missing_in_dev=settings.env == "dev",
+            fallback_env=env_store,
+        )
     fallback = None
     if settings.secret_store_path:
         fallback = FileSecretStore(settings.secret_store_path)

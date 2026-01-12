@@ -1,0 +1,118 @@
+{
+  "info": {
+    "name": "Presence360 Control Plane",
+    "_postman_id": "7f1c77c4-4d2a-4e74-9db0-15a0f2f7f7f1",
+    "description": "Control Plane API collection (derived from /openapi.json).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{control_plane_base_url}}/healthz"
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": "{{control_plane_base_url}}/healthz"
+          },
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"status\": \"ok\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Create Tenant (grace)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{control_plane_dev_token}}" },
+          { "key": "Idempotency-Key", "value": "demo-tenant-001" }
+        ],
+        "url": "{{control_plane_base_url}}/v1/tenants",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"slug\":\"grace\",\"name\":\"Grace Chapel\",\"template_key\":\"church\",\"admin_email\":\"admin@grace.local\",\"admin_name\":\"Grace Admin\",\"timezone\":\"Africa/Accra\",\"locale\":\"en-GH\"}"
+        }
+      },
+      "response": [
+        {
+          "name": "201 Created",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "url": "{{control_plane_base_url}}/v1/tenants"
+          },
+          "status": "Created",
+          "code": 201,
+          "body": "{\n  \"tenant_id\": \"<uuid>\",\n  \"slug\": \"grace\",\n  \"provisioning_state\": \"ready\",\n  \"db_name\": \"tenant_<uuid>\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Create Tenant (joy)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{control_plane_dev_token}}" },
+          { "key": "Idempotency-Key", "value": "demo-tenant-002" }
+        ],
+        "url": "{{control_plane_base_url}}/v1/tenants",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"slug\":\"joy\",\"name\":\"Joy Chapel\",\"template_key\":\"church\",\"admin_email\":\"admin@joy.local\",\"admin_name\":\"Joy Admin\",\"timezone\":\"Africa/Accra\",\"locale\":\"en-GH\"}"
+        }
+      },
+      "response": [
+        {
+          "name": "201 Created",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "url": "{{control_plane_base_url}}/v1/tenants"
+          },
+          "status": "Created",
+          "code": 201,
+          "body": "{\n  \"tenant_id\": \"<uuid>\",\n  \"slug\": \"joy\",\n  \"provisioning_state\": \"ready\",\n  \"db_name\": \"tenant_<uuid>\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Idempotency Retry (grace)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{control_plane_dev_token}}" },
+          { "key": "Idempotency-Key", "value": "demo-tenant-001" }
+        ],
+        "url": "{{control_plane_base_url}}/v1/tenants",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"slug\":\"grace\",\"name\":\"Grace Chapel\",\"template_key\":\"church\",\"admin_email\":\"admin@grace.local\",\"admin_name\":\"Grace Admin\",\"timezone\":\"Africa/Accra\",\"locale\":\"en-GH\"}"
+        }
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "url": "{{control_plane_base_url}}/v1/tenants"
+          },
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"tenant_id\": \"<same-uuid>\",\n  \"slug\": \"grace\",\n  \"provisioning_state\": \"ready\",\n  \"db_name\": \"tenant_<same-uuid>\"\n}"
+        }
+      ]
+    }
+  ]
+}
