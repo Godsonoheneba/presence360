@@ -1,0 +1,9 @@
+{
+  "name": "presence360",
+  "private": true,
+  "workspaces": [
+    "apps/web-control-plane",
+    "apps/web-tenant",
+    "packages/shared"
+  ]
+}

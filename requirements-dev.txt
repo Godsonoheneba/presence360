@@ -1,0 +1,9 @@
+pytest
+ruff
+httpx
+pre-commit
+psycopg[binary]
+boto3
+python-multipart
+cryptography
+pip-audit

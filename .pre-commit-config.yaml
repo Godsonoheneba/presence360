@@ -1,0 +1,18 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.8
+    hooks:
+      - id: ruff
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: eslint-web-tenant
+        name: eslint (web-tenant)
+        entry: npm --prefix apps/web-tenant run lint
+        language: system
+        files: ^apps/web-tenant/
+      - id: eslint-web-control-plane
+        name: eslint (web-control-plane)
+        entry: npm --prefix apps/web-control-plane run lint
+        language: system
+        files: ^apps/web-control-plane/

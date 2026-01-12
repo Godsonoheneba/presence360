@@ -1,0 +1,166 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  control-plane-api:
+    build: ./apps/control-plane-api
+    env_file: .env
+    environment:
+      ENV: ${ENV}
+      DATABASE_URL: ${CONTROL_PLANE_DATABASE_URL}
+      POSTGRES_ADMIN_URL: ${POSTGRES_ADMIN_URL}
+      SECRET_STORE_BACKEND: ${SECRET_STORE_BACKEND:-env}
+      SECRET_STORE_PATH: ${SECRET_STORE_PATH:-/app/.secrets/tenant_db.json}
+      TENANT_SECRET_TENANT_DB_PASSWORD: ${TENANT_SECRET_TENANT_DB_PASSWORD:-}
+      REKOGNITION_MODE: ${REKOGNITION_MODE}
+      REKOGNITION_REGION: ${REKOGNITION_REGION}
+      INTERNAL_TOKEN: ${CONTROL_PLANE_INTERNAL_TOKEN}
+      AUTH_MODE: ${AUTH_MODE}
+      AUTH_DEV_SUPER_TOKEN: ${AUTH_DEV_SUPER_TOKEN}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-}
+      CORS_ALLOW_METHODS: ${CORS_ALLOW_METHODS:-GET,POST,PUT,PATCH,DELETE,OPTIONS}
+      CORS_ALLOW_HEADERS: ${CORS_ALLOW_HEADERS:-Authorization,Content-Type,Idempotency-Key,X-Request-Id}
+      CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-false}
+      MAX_REQUEST_SIZE_BYTES: ${MAX_REQUEST_SIZE_BYTES:-5000000}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_JSON: ${LOG_JSON:-true}
+      METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      METRICS_PORT: ${METRICS_PORT:-9101}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-control-plane-api}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./.secrets:/app/.secrets
+    ports:
+      - "8001:8000"
+
+  tenant-api:
+    build: ./apps/tenant-api
+    env_file: .env
+    environment:
+      ENV: ${ENV}
+      DATABASE_URL: ${TENANT_DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      CONTROL_PLANE_API_URL: ${CONTROL_PLANE_API_URL}
+      CONTROL_PLANE_INTERNAL_TOKEN: ${CONTROL_PLANE_INTERNAL_TOKEN}
+      SECRET_STORE_BACKEND: ${SECRET_STORE_BACKEND:-env}
+      SECRET_STORE_PATH: ${SECRET_STORE_PATH:-/app/.secrets/tenant_db.json}
+      TENANT_SECRET_MNOTIFY_API_KEY: ${TENANT_SECRET_MNOTIFY_API_KEY:-}
+      TENANT_SECRET_TENANT_DB_PASSWORD: ${TENANT_SECRET_TENANT_DB_PASSWORD:-}
+      TENANT_REGISTRY_CACHE_TTL_SECONDS: ${TENANT_REGISTRY_CACHE_TTL_SECONDS}
+      MESSAGING_MODE: ${MESSAGING_MODE:-mock}
+      MNOTIFY_BASE_URL: ${MNOTIFY_BASE_URL}
+      MNOTIFY_TIMEOUT_SECONDS: ${MNOTIFY_TIMEOUT_SECONDS}
+      PHONE_ENCRYPTION_KEY: ${PHONE_ENCRYPTION_KEY}
+      PHONE_HASH_SECRET: ${PHONE_HASH_SECRET}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-}
+      CORS_ALLOW_METHODS: ${CORS_ALLOW_METHODS:-GET,POST,PUT,PATCH,DELETE,OPTIONS}
+      CORS_ALLOW_HEADERS: ${CORS_ALLOW_HEADERS:-Authorization,Content-Type,Idempotency-Key,X-Request-Id,X-Tenant-Slug,X-Gate-Session}
+      CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-false}
+      MAX_REQUEST_SIZE_BYTES: ${MAX_REQUEST_SIZE_BYTES:-10000000}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_JSON: ${LOG_JSON:-true}
+      METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      METRICS_PORT: ${METRICS_PORT:-9101}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-tenant-api}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      GATE_BOOTSTRAP_TOKEN: ${GATE_BOOTSTRAP_TOKEN}
+      GATE_SESSION_TTL_SECONDS: ${GATE_SESSION_TTL_SECONDS}
+      GATE_FRAME_COOLDOWN_SECONDS: ${GATE_FRAME_COOLDOWN_SECONDS}
+      GATE_HEARTBEAT_INTERVAL_SECONDS: ${GATE_HEARTBEAT_INTERVAL_SECONDS}
+      CELERY_TASK_ALWAYS_EAGER: ${CELERY_TASK_ALWAYS_EAGER}
+      CELERY_TASK_EAGER_PROPAGATES: ${CELERY_TASK_EAGER_PROPAGATES}
+      AUTH_MODE: ${AUTH_MODE}
+      AUTH_DEV_TOKEN: ${AUTH_DEV_TOKEN}
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./.secrets:/app/.secrets
+    ports:
+      - "8000:8000"
+
+  worker:
+    build: ./apps/tenant-api
+    env_file: .env
+    environment:
+      DATABASE_URL: ${TENANT_DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      CONTROL_PLANE_API_URL: ${CONTROL_PLANE_API_URL}
+      CONTROL_PLANE_INTERNAL_TOKEN: ${CONTROL_PLANE_INTERNAL_TOKEN}
+      SECRET_STORE_BACKEND: ${SECRET_STORE_BACKEND:-env}
+      SECRET_STORE_PATH: ${SECRET_STORE_PATH:-/app/.secrets/tenant_db.json}
+      TENANT_SECRET_MNOTIFY_API_KEY: ${TENANT_SECRET_MNOTIFY_API_KEY:-}
+      TENANT_SECRET_TENANT_DB_PASSWORD: ${TENANT_SECRET_TENANT_DB_PASSWORD:-}
+      TENANT_REGISTRY_CACHE_TTL_SECONDS: ${TENANT_REGISTRY_CACHE_TTL_SECONDS}
+      MESSAGING_MODE: ${MESSAGING_MODE:-mock}
+      MNOTIFY_BASE_URL: ${MNOTIFY_BASE_URL}
+      MNOTIFY_TIMEOUT_SECONDS: ${MNOTIFY_TIMEOUT_SECONDS}
+      PHONE_ENCRYPTION_KEY: ${PHONE_ENCRYPTION_KEY}
+      PHONE_HASH_SECRET: ${PHONE_HASH_SECRET}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_JSON: ${LOG_JSON:-true}
+      METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-tenant-worker}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      GATE_BOOTSTRAP_TOKEN: ${GATE_BOOTSTRAP_TOKEN}
+      GATE_SESSION_TTL_SECONDS: ${GATE_SESSION_TTL_SECONDS}
+      GATE_FRAME_COOLDOWN_SECONDS: ${GATE_FRAME_COOLDOWN_SECONDS}
+      CELERY_TASK_ALWAYS_EAGER: ${CELERY_TASK_ALWAYS_EAGER}
+      CELERY_TASK_EAGER_PROPAGATES: ${CELERY_TASK_EAGER_PROPAGATES}
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=INFO"]
+    depends_on:
+      - redis
+      - tenant-api
+    volumes:
+      - ./.secrets:/app/.secrets
+
+  web-tenant:
+    build: ./apps/web-tenant
+    env_file: .env
+    environment:
+      NEXT_PUBLIC_API_URL: ${TENANT_API_URL}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - tenant-api
+
+  web-control-plane:
+    build: ./apps/web-control-plane
+    env_file: .env
+    environment:
+      NEXT_PUBLIC_API_URL: ${CONTROL_PLANE_API_URL}
+    ports:
+      - "3001:3000"
+    depends_on:
+      - control-plane-api
+
+  gate-agent-sim:
+    build: ./apps/gate-agent
+    env_file: .env
+    profiles: ["gate"]
+    environment:
+      TENANT_API_URL: ${TENANT_API_URL}
+      GATE_BOOTSTRAP_TOKEN: ${GATE_BOOTSTRAP_TOKEN}
+
+volumes:
+  postgres_data:

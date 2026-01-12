@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: presence360
+          POSTGRES_PASSWORD: presence360
+          POSTGRES_DB: presence360
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U presence360"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+    env:
+      ENV: dev
+      AUTH_MODE: dev
+      AUTH_DEV_TOKEN: dev-tenant
+      AUTH_DEV_SUPER_TOKEN: dev-super
+      CONTROL_PLANE_DATABASE_URL: postgresql+psycopg://presence360:presence360@localhost:5432/control_plane
+      TENANT_DATABASE_URL: postgresql+psycopg://presence360:presence360@localhost:5432/tenant_dev
+      POSTGRES_ADMIN_URL: postgresql+psycopg://presence360:presence360@localhost:5432/postgres
+      REDIS_URL: redis://localhost:6379/0
+      CONTROL_PLANE_INTERNAL_TOKEN: dev-internal
+      SECRET_STORE_BACKEND: file
+      SECRET_STORE_PATH: .secrets/tenant_db.json
+      REKOGNITION_MODE: mock
+      MESSAGING_MODE: mock
+      PHONE_ENCRYPTION_KEY: CHANGE_ME
+      PHONE_HASH_SECRET: CHANGE_ME
+      GATE_BOOTSTRAP_TOKEN: dev-gate-bootstrap
+      CELERY_TASK_ALWAYS_EAGER: "true"
+      CELERY_TASK_EAGER_PROPAGATES: "true"
+      METRICS_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Install Python dependencies
+        run: |
+          pip install -r apps/control-plane-api/requirements.txt
+          pip install -r apps/tenant-api/requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Install Node dependencies
+        run: |
+          npm --prefix apps/web-tenant install
+          npm --prefix apps/web-control-plane install
+      - name: Create databases
+        env:
+          PGPASSWORD: presence360
+        run: |
+          psql -h localhost -U presence360 -d postgres -c "CREATE DATABASE control_plane;"
+          psql -h localhost -U presence360 -d postgres -c "CREATE DATABASE tenant_dev;"
+      - name: Run migrations
+        run: |
+          DATABASE_URL="$CONTROL_PLANE_DATABASE_URL" alembic -c apps/control-plane-api/alembic.ini upgrade head
+          DATABASE_URL="$TENANT_DATABASE_URL" alembic -c apps/tenant-api/alembic.ini upgrade head
+      - name: Make audit
+        run: make audit

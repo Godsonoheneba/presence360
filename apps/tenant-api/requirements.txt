@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sqlalchemy>=2.0
+alembic
+pydantic-settings
+psycopg[binary]
+httpx
+celery
+redis
+boto3
+python-multipart
+cryptography
+prometheus_client
