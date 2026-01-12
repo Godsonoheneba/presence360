@@ -140,7 +140,11 @@ services:
     build: ./apps/web-tenant
     env_file: .env
     environment:
-      NEXT_PUBLIC_API_URL: ${TENANT_API_URL}
+      NEXT_PUBLIC_TENANT_API_BASE_URL: ${NEXT_PUBLIC_TENANT_API_BASE_URL:-http://localhost:8000}
+      NEXT_PUBLIC_CONTROL_PLANE_API_BASE_URL: ${NEXT_PUBLIC_CONTROL_PLANE_API_BASE_URL:-http://localhost:8001}
+      NEXT_PUBLIC_APP_ENV: ${NEXT_PUBLIC_APP_ENV:-dev}
+      NEXT_PUBLIC_DEV_TENANT_SLUG: ${NEXT_PUBLIC_DEV_TENANT_SLUG:-grace}
+      NEXT_PUBLIC_DEV_AUTH_TOKEN: ${NEXT_PUBLIC_DEV_AUTH_TOKEN:-}
     ports:
       - "3000:3000"
     depends_on:
@@ -150,7 +154,10 @@ services:
     build: ./apps/web-control-plane
     env_file: .env
     environment:
-      NEXT_PUBLIC_API_URL: ${CONTROL_PLANE_API_URL}
+      NEXT_PUBLIC_TENANT_API_BASE_URL: ${NEXT_PUBLIC_TENANT_API_BASE_URL:-http://localhost:8000}
+      NEXT_PUBLIC_CONTROL_PLANE_API_BASE_URL: ${NEXT_PUBLIC_CONTROL_PLANE_API_BASE_URL:-http://localhost:8001}
+      NEXT_PUBLIC_APP_ENV: ${NEXT_PUBLIC_APP_ENV:-dev}
+      NEXT_PUBLIC_DEV_SUPER_TOKEN: ${NEXT_PUBLIC_DEV_SUPER_TOKEN:-}
     ports:
       - "3001:3000"
     depends_on:

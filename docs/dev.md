@@ -6,6 +6,15 @@ cp .env.example .env
 make dev-up
 ```
 
+## Frontend env
+Update `.env` with:
+- `NEXT_PUBLIC_APP_ENV=dev`
+- `NEXT_PUBLIC_TENANT_API_BASE_URL=http://localhost:8000`
+- `NEXT_PUBLIC_CONTROL_PLANE_API_BASE_URL=http://localhost:8001`
+- `NEXT_PUBLIC_DEV_TENANT_SLUG=grace`
+- `NEXT_PUBLIC_DEV_AUTH_TOKEN=dev-tenant`
+- `NEXT_PUBLIC_DEV_SUPER_TOKEN=dev-super`
+
 ## Install web dependencies (for local lint/test)
 ```bash
 npm --prefix apps/web-tenant install

@@ -269,6 +269,8 @@ def _render_template(template: MessageTemplate, context: dict[str, Any]) -> str:
 
 @app.middleware("http")
 async def tenant_resolution_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
     path = request.url.path
     if (
         path == "/healthz"

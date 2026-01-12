@@ -11,6 +11,15 @@ make dev-seed
 make dev-smoke
 ```
 
+## Frontend env
+Add these to `.env` (or use the defaults from `.env.example`):
+- `NEXT_PUBLIC_APP_ENV=dev`
+- `NEXT_PUBLIC_TENANT_API_BASE_URL=http://localhost:8000`
+- `NEXT_PUBLIC_CONTROL_PLANE_API_BASE_URL=http://localhost:8001`
+- `NEXT_PUBLIC_DEV_TENANT_SLUG=grace`
+- `NEXT_PUBLIC_DEV_AUTH_TOKEN=dev-tenant`
+- `NEXT_PUBLIC_DEV_SUPER_TOKEN=dev-super`
+
 ## Postman
 Import the collections and environment from `postman/`:
 - `postman/Presence360-ControlPlane.postman_collection.json`
