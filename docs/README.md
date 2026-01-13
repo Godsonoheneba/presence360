@@ -28,6 +28,12 @@ Import the collections and environment from `postman/`:
 
 Update the environment tokens to match your `.env` values, then run the requests.
 
+## Screenshots
+Add screenshots under `docs/screenshots/`:
+- `docs/screenshots/tenant-dashboard.png`
+- `docs/screenshots/tenant-onboarding.png`
+- `docs/screenshots/control-plane-dashboard.png`
+
 ## URLs
 - Tenant API: http://localhost:8000
 - Control Plane API: http://localhost:8001
@@ -39,3 +45,5 @@ Update the environment tokens to match your `.env` values, then run the requests
 ## Notes
 - Dev secrets live at `secrets/dev-secrets.json` (gitignored).
 - `make dev-smoke` exercises tenant provisioning, routing, login, and mock messaging.
+- Onboarding wizard lives at `http://localhost:3000/onboarding`.
+- Run Playwright smoke tests with `npm run e2e` (requires web apps running).

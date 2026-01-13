@@ -1,136 +1,189 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { PageHeader } from "@/components/layout/page-header";
+import { PageShell } from "@/components/layout/page-shell";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
+import { isDev } from "@/lib/env";
 import type { Tenant } from "@/lib/types";
 
 export default function TenantDetailPage() {
   const params = useParams();
   const tenantId = String(params.id ?? "");
-  const [tenant, setTenant] = useState<Tenant | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const response = await api.get<Tenant>(`/v1/tenants/${tenantId}`);
-        setTenant({ ...response, id: tenantId });
-      } catch {
-        setTenant({ id: tenantId });
-      } finally {
-        setLoading(false);
-      }
-    };
-    if (tenantId) {
-      load();
-    }
-  }, [tenantId]);
+  const { data: tenant, isLoading } = useQuery({
+    queryKey: ["tenants", tenantId],
+    queryFn: () => api.get<Tenant>(`/v1/tenants/${tenantId}`),
+    enabled: Boolean(tenantId),
+  });
 
-  const runAction = async (action: string, path: string) => {
-    setActionLoading(action);
-    try {
-      await api.post(path, {});
-      toast.success(`${action} complete`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : `${action} failed`);
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  const { data: health } = useQuery({
+    queryKey: ["tenant-health", tenantId],
+    queryFn: () => api.get<Record<string, unknown>>(`/v1/tenants/${tenantId}/health`),
+    enabled: Boolean(tenantId),
+  });
+
+  const { data: usage } = useQuery({
+    queryKey: ["tenant-usage", tenantId],
+    queryFn: () => api.get<Record<string, unknown>>(`/v1/tenants/${tenantId}/usage`),
+    enabled: Boolean(tenantId),
+  });
+
+  const suspend = useMutation({
+    mutationFn: async () => api.post(`/v1/tenants/${tenantId}/suspend`, {}),
+    onSuccess: () => toast.success("Tenant suspended"),
+    onError: () => toast.error("Unable to suspend tenant"),
+  });
+
+  const unsuspend = useMutation({
+    mutationFn: async () => api.post(`/v1/tenants/${tenantId}/unsuspend`, {}),
+    onSuccess: () => toast.success("Tenant unsuspended"),
+    onError: () => toast.error("Unable to unsuspend tenant"),
+  });
+
+  const rotateSecrets = useMutation({
+    mutationFn: async () => api.post(`/v1/tenants/${tenantId}/rotate-secrets`, {}),
+    onSuccess: () => toast.success("Secret rotation queued"),
+    onError: () => toast.error("Unable to rotate secrets"),
+  });
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Tenant details"
-        description="Inspect provisioning state and run control actions."
-        action={
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={actionLoading === "Suspend"}
-              onClick={() => runAction("Suspend", `/v1/tenants/${tenantId}/suspend`)}
-            >
-              Suspend
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={actionLoading === "Unsuspend"}
-              onClick={() => runAction("Unsuspend", `/v1/tenants/${tenantId}/unsuspend`)}
-            >
-              Unsuspend
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={actionLoading === "Rotate"}
-              onClick={() => runAction("Rotate", `/v1/tenants/${tenantId}/rotate-secrets`)}
-            >
-              Rotate secrets
-            </Button>
-          </div>
-        }
-      />
+    <PageShell
+      title="Tenant details"
+      description="Inspect provisioning state and run control actions."
+      breadcrumbs={[
+        { label: "Dashboard", href: "/dashboard" },
+        { label: "Tenants", href: "/tenants" },
+        { label: tenantId },
+      ]}
+      action={
+        <Button asChild variant="outline">
+          <Link href="/tenants">Back</Link>
+        </Button>
+      }
+    >
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="health">Health</TabsTrigger>
+          <TabsTrigger value="usage">Usage</TabsTrigger>
+          <TabsTrigger value="actions">Actions</TabsTrigger>
+        </TabsList>
 
-      <Card className="bg-card/90">
-        <CardContent className="pt-5">
-          {loading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-6 w-40" />
-              <Skeleton className="h-4 w-64" />
-              <Skeleton className="h-4 w-64" />
-            </div>
-          ) : (
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <div>
-                <span className="text-xs uppercase tracking-[0.2em]">Tenant ID</span>
-                <p className="mt-1 text-foreground">{tenant?.id}</p>
-              </div>
-              <div>
-                <span className="text-xs uppercase tracking-[0.2em]">Slug</span>
-                <p className="mt-1 text-foreground">{tenant?.slug ?? "-"}</p>
-              </div>
-              <div>
-                <span className="text-xs uppercase tracking-[0.2em]">Status</span>
-                <p className="mt-1 text-foreground">{tenant?.status ?? "unknown"}</p>
-              </div>
-              <div>
-                <span className="text-xs uppercase tracking-[0.2em]">Provisioning</span>
-                <p className="mt-1 text-foreground">
-                  {tenant?.provisioning_state ?? "unknown"}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 pt-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={actionLoading === "Health"}
-                  onClick={() => runAction("Health", `/v1/tenants/${tenantId}/health`)}
-                >
-                  Check health
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={actionLoading === "Usage"}
-                  onClick={() => runAction("Usage", `/v1/tenants/${tenantId}/usage`)}
-                >
-                  View usage
-                </Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+        <TabsContent value="overview">
+          <Card className="bg-card/90">
+            <CardContent className="pt-5">
+              {isLoading ? (
+                <Skeleton className="h-20 w-full" />
+              ) : !tenant ? (
+                <EmptyState title="Tenant not found" description="No tenant record available." />
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Tenant ID</p>
+                    <p className="mt-2 text-sm font-semibold text-foreground">{tenant.id}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Slug</p>
+                    <p className="mt-2 text-sm text-muted-foreground">{tenant.slug ?? "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Status</p>
+                    <Badge className="mt-2">{tenant.status ?? "unknown"}</Badge>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Provisioning</p>
+                    <Badge className="mt-2">{tenant.provisioning_state ?? "unknown"}</Badge>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Tenant access</p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {tenant.slug ? (
+                        <Link
+                          href={
+                            isDev
+                              ? `http://${tenant.slug}.localtest.me:3000`
+                              : `https://${tenant.slug}.presence360.app`
+                          }
+                          className="text-xs font-semibold text-primary hover:underline"
+                        >
+                          Open tenant app
+                        </Link>
+                      ) : (
+                        "Add a slug to enable tenant access"
+                      )}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="health">
+          <Card className="bg-card/90">
+            <CardContent className="pt-5">
+              {health ? (
+                <pre className="whitespace-pre-wrap text-xs text-muted-foreground">
+                  {JSON.stringify(health, null, 2)}
+                </pre>
+              ) : (
+                <EmptyState title="No health data" description="Health checks will appear here." />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="usage">
+          <Card className="bg-card/90">
+            <CardContent className="pt-5">
+              {usage ? (
+                <pre className="whitespace-pre-wrap text-xs text-muted-foreground">
+                  {JSON.stringify(usage, null, 2)}
+                </pre>
+              ) : (
+                <EmptyState title="No usage data" description="Usage metrics will appear here." />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="actions">
+          <Card className="bg-card/90">
+            <CardContent className="flex flex-wrap gap-2 pt-5">
+              <ConfirmDialog
+                trigger={<Button variant="outline">Suspend</Button>}
+                title="Suspend tenant"
+                description="Suspended tenants cannot access the platform."
+                destructive
+                onConfirm={() => suspend.mutate()}
+              />
+              <ConfirmDialog
+                trigger={<Button variant="outline">Unsuspend</Button>}
+                title="Unsuspend tenant"
+                description="Restores tenant access immediately."
+                onConfirm={() => unsuspend.mutate()}
+              />
+              <ConfirmDialog
+                trigger={<Button variant="outline">Rotate secrets</Button>}
+                title="Rotate secrets"
+                description="Generate new DB and provider credentials."
+                onConfirm={() => rotateSecrets.mutate()}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </PageShell>
   );
 }

@@ -23,6 +23,71 @@ export type Person = {
   id: string;
   full_name?: string;
   consent_status?: string;
+  phone?: string | null;
+};
+
+export type TenantConfigItem = {
+  key: string;
+  value: unknown;
+};
+
+export type Location = {
+  id: string;
+  name?: string;
+  address?: string | null;
+};
+
+export type Gate = {
+  id: string;
+  name?: string;
+  status?: string;
+};
+
+export type Camera = {
+  id: string;
+  name?: string;
+  gate_id?: string | null;
+  rtsp_url?: string | null;
+};
+
+export type Service = {
+  id: string;
+  name?: string;
+  location_id?: string | null;
+  status?: string;
+};
+
+export type ServiceSession = {
+  id: string;
+  service_id?: string | null;
+  status?: string;
+  started_at?: string | null;
+  ended_at?: string | null;
+};
+
+export type VisitEvent = {
+  id?: string;
+  captured_at?: string;
+  gate_id?: string;
+  person_id?: string | null;
+};
+
+export type RecognitionResult = {
+  frame_id?: string;
+  gate_id?: string;
+  person_id?: string | null;
+  decision?: string;
+  best_confidence?: number | null;
+  processed_at?: string;
+};
+
+export type Template = {
+  id: string;
+  name?: string;
+  channel?: string;
+  body?: string;
+  variables_json?: string[];
+  active?: boolean;
 };
 
 export type MessageLog = {
@@ -41,6 +106,7 @@ export type Rule = {
   name?: string;
   status?: string;
   rule_type?: string;
+  config?: Record<string, unknown>;
 };
 
 export type FollowupTask = {

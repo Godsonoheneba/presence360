@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { toast } from "sonner";
+
 import { api } from "@/lib/api";
 import { authEvents } from "@/lib/auth-events";
 import { env, isDev } from "@/lib/env";
@@ -30,13 +32,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const devToken = env.devSuperToken || undefined;
 
-  const verify = useCallback(async () => {
+  const verify = useCallback(async (): Promise<boolean> => {
     try {
       await api.get("/v1/tenants");
       setStatus("authenticated");
+      return true;
     } catch {
       clearSession();
       setStatus("anonymous");
+      return false;
     }
   }, []);
 
@@ -46,7 +50,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("Missing token");
       }
       setAccessToken(token);
-      await verify();
+      const ok = await verify();
+      if (!ok) {
+        throw new Error("Unable to verify token. Check your credentials.");
+      }
     },
     [verify],
   );
@@ -63,11 +70,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     setAccessToken(token);
-    verify();
+    void verify();
   }, [verify]);
 
   useEffect(() => {
-    const unsubscribe = authEvents.onUnauthorized(() => logout());
+    const unsubscribe = authEvents.onUnauthorized(() => {
+      logout();
+      toast.error("Session expired. Please sign in again.");
+    });
     return () => unsubscribe();
   }, [logout]);
 

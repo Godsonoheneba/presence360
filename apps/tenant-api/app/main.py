@@ -33,6 +33,7 @@ from .crypto import encrypt_text, hash_text, normalize_phone
 from .face_provider import PROVIDER_NAME, get_face_provider
 from .logging_utils import clear_log_context, configure_logging, set_log_context
 from .metrics import metrics_response, observe_request, record_task_result
+from .tenant_config import list_config, set_config_value
 from .models import (
     AuditLog,
     ConsentEvent,
@@ -337,13 +338,34 @@ def update_user_roles(user_id: str, payload: dict[str, Any] = Body(...)):
 
 
 @protected_router.get("/config")
-def get_config():
-    return {"items": []}
+def get_config(session: Session = Depends(get_tenant_session)):
+    records = list_config(session)
+    return {
+        "items": [
+            {"key": record.key, "value": record.value_json}
+            for record in records
+        ]
+    }
 
 
 @protected_router.patch("/config")
-def update_config(payload: dict[str, Any] = Body(...)):
-    return {"status": "updated", "details": payload}
+def update_config(
+    payload: dict[str, Any] = Body(...),
+    session: Session = Depends(get_tenant_session),
+):
+    items = payload.get("items")
+    if isinstance(items, list):
+        updated = []
+        for item in items:
+            if not isinstance(item, dict) or "key" not in item:
+                raise HTTPException(status_code=422, detail="items must include key")
+            record = set_config_value(session, str(item["key"]), item.get("value"))
+            updated.append({"key": record.key, "value": record.value_json})
+        return {"items": updated}
+    if "key" in payload:
+        record = set_config_value(session, str(payload["key"]), payload.get("value"))
+        return {"items": [{"key": record.key, "value": record.value_json}]}
+    raise HTTPException(status_code=422, detail="items or key is required")
 
 
 @protected_router.post("/people")

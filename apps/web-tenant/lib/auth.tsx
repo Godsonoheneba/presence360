@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { toast } from "sonner";
+
 import { api } from "@/lib/api";
 import { authEvents } from "@/lib/auth-events";
 import { env, isDev } from "@/lib/env";
@@ -71,13 +73,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus("anonymous");
   }, []);
 
-  const loadMe = useCallback(async () => {
+  const loadMe = useCallback(async (): Promise<boolean> => {
     try {
       const me = await api.get<MeResponse>("/v1/me");
       setUser(normalizeUser(me));
       setStatus("authenticated");
+      return true;
     } catch {
       handleLogout();
+      return false;
     }
   }, [handleLogout]);
 
@@ -107,7 +111,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRefreshToken(response.refresh_token);
       }
 
-      await loadMe();
+      const verified = await loadMe();
+      if (!verified) {
+        throw new Error("Unable to verify credentials. Check your token.");
+      }
     },
     [devToken, loadMe],
   );
@@ -119,11 +126,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     setAccessToken(token);
-    loadMe();
+    void loadMe();
   }, [loadMe]);
 
   useEffect(() => {
-    const unsubscribe = authEvents.onUnauthorized(() => handleLogout());
+    const unsubscribe = authEvents.onUnauthorized(() => {
+      handleLogout();
+      toast.error("Session expired. Please sign in again.");
+    });
     return () => unsubscribe();
   }, [handleLogout]);
 

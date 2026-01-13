@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
+import Link from "next/link";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
@@ -59,6 +61,12 @@ export function LoginForm() {
       <Button type="submit" className="w-full" disabled={loading}>
         {loading ? "Signing in..." : "Sign in"}
       </Button>
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <Link href="/forgot-password" className="font-semibold text-primary">
+          Forgot password?
+        </Link>
+        <span>Support reset required</span>
+      </div>
       {isDev ? (
         <div className="rounded-md border border-dashed border-border bg-muted/50 p-3 text-xs text-muted-foreground">
           <p className="font-semibold text-foreground">Dev auth enabled</p>

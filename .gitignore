@@ -66,6 +66,9 @@ build/
 .npm/
 .yarn/
 .pnpm-store/
+.playwright/
+playwright-report/
+test-results/
 *.tsbuildinfo
 .eslintcache
 .stylelintcache

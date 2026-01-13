@@ -1,78 +1,98 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
-import { PageHeader } from "@/components/layout/page-header";
+import { PageShell } from "@/components/layout/page-shell";
 import { DataTable } from "@/components/tables/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { PermissionGate } from "@/components/auth/permission-gate";
 import { api } from "@/lib/api";
 import type { FollowupTask } from "@/lib/types";
 
 export default function FollowupsPage() {
-  const [tasks, setTasks] = useState<FollowupTask[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const { data: followupsResponse, isLoading } = useQuery({
+    queryKey: ["followups"],
+    queryFn: () => api.get<{ items: FollowupTask[] }>("/v1/followups"),
+  });
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const response = await api.get<{ items: FollowupTask[] }>("/v1/followups");
-        setTasks(response.items ?? []);
-      } catch {
-        setTasks([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, []);
+  const tasks = useMemo(() => followupsResponse?.items ?? [], [followupsResponse?.items]);
+  const filtered = useMemo(() => {
+    if (!search) {
+      return tasks;
+    }
+    return tasks.filter((task) => task.person_id?.includes(search));
+  }, [tasks, search]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
+    <PermissionGate permissions={["followups.read"]}>
+      <PageShell
         title="Follow-ups"
-        description="Open tasks for absence and pastoral care workflows."
-      />
+        description="Tasks triggered by welcome and absence rules."
+        breadcrumbs={[{ label: "Dashboard", href: "/" }, { label: "Follow-ups" }]}
+      >
+      <Card className="bg-card/90">
+        <CardContent className="pt-6">
+          <Input
+            placeholder="Search by person id"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="max-w-xs"
+          />
+        </CardContent>
+      </Card>
+
       <Card className="bg-card/90">
         <CardContent className="pt-5">
-          {loading ? (
+          {isLoading ? (
             <div className="space-y-3">
-              <Skeleton className="h-6 w-40" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
+              <div className="h-6 w-40 animate-pulse rounded bg-muted" />
+              <div className="h-10 w-full animate-pulse rounded bg-muted" />
+              <div className="h-10 w-full animate-pulse rounded bg-muted" />
             </div>
-          ) : tasks.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No follow-up tasks yet.</p>
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              title="No follow-up tasks"
+              description="Absence and welcome rules will generate tasks automatically."
+            />
           ) : (
             <DataTable
               columns={[
+                { key: "id", header: "Task" },
                 {
                   key: "status",
                   header: "Status",
                   render: (value) => (
-                    <Badge
-                      variant={
-                        value === "open"
-                          ? "warning"
-                          : value === "closed"
-                            ? "success"
-                            : "default"
-                      }
-                    >
-                      {String(value ?? "unknown")}
+                    <Badge variant={value === "open" ? "success" : "default"}>
+                      {String(value ?? "open")}
                     </Badge>
                   ),
                 },
-                { key: "priority", header: "Priority" },
                 { key: "due_at", header: "Due" },
-                { key: "id", header: "Task ID" },
+                {
+                  key: "id",
+                  header: "",
+                  render: (value) => (
+                    <Link
+                      href={`/followups/${value}`}
+                      className="text-xs font-semibold text-primary hover:underline"
+                    >
+                      View
+                    </Link>
+                  ),
+                },
               ]}
-              data={tasks}
+              data={filtered}
             />
           )}
         </CardContent>
       </Card>
-    </div>
+      </PageShell>
+    </PermissionGate>
   );
 }

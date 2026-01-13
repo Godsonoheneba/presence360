@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
+import Link from "next/link";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
@@ -43,6 +45,12 @@ export function LoginForm() {
       <Button type="submit" className="w-full" disabled={loading}>
         {loading ? "Signing in..." : "Sign in"}
       </Button>
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <Link href="/forgot-password" className="font-semibold text-primary">
+          Forgot token?
+        </Link>
+        <span>Rotate in control plane</span>
+      </div>
       {isDev ? (
         <p className="text-xs text-muted-foreground">
           Dev-only auth is enabled. Set NEXT_PUBLIC_DEV_SUPER_TOKEN for one-click

@@ -45,6 +45,26 @@ def ensure_defaults(session: Session) -> dict[str, Any]:
     return values
 
 
+def list_config(session: Session) -> list[TenantConfig]:
+    ensure_defaults(session)
+    return session.execute(select(TenantConfig).order_by(TenantConfig.key)).scalars().all()
+
+
+def set_config_value(session: Session, key: str, value: Any) -> TenantConfig:
+    record = session.execute(
+        select(TenantConfig).where(TenantConfig.key == key)
+    ).scalar_one_or_none()
+    if record:
+        record.value_json = value
+        session.add(record)
+        session.commit()
+        return record
+    record = TenantConfig(key=key, value_json=value)
+    session.add(record)
+    session.commit()
+    return record
+
+
 def get_secret_config_value(session: Session, key: str) -> str | None:
     value = get_config_value(session, key)
     return resolve_secret_value(value)

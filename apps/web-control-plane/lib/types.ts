@@ -2,6 +2,10 @@ export type TenantCreateRequest = {
   slug: string;
   name: string;
   admin_email: string;
+  admin_name?: string;
+  template_key?: string;
+  timezone?: string;
+  locale?: string;
 };
 
 export type TenantCreateResponse = {
@@ -17,6 +21,8 @@ export type Tenant = {
   name?: string;
   status?: string;
   provisioning_state?: string;
+  created_at?: string;
+  db_name?: string;
 };
 
 export type TenantListResponse = {

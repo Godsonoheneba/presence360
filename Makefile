@@ -1,4 +1,4 @@
-.PHONY: up down logs migrate-control migrate-tenant lint test audit backup-list restore-checklist dev-up dev-migrate dev-seed dev-smoke eslint typecheck
+.PHONY: up down logs migrate-control migrate-tenant lint test audit backup-list restore-checklist dev-up dev-migrate dev-seed dev-smoke eslint typecheck e2e
 
 up:
 	docker compose up -d --build
@@ -31,6 +31,9 @@ eslint:
 typecheck:
 	npm --prefix apps/web-tenant run typecheck
 	npm --prefix apps/web-control-plane run typecheck
+
+e2e:
+	npm run e2e
 
 test:
 	PYTHONPATH=apps/control-plane-api pytest apps/control-plane-api/tests

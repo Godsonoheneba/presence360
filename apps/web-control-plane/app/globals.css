@@ -17,6 +17,26 @@
   --ring: 215 86% 48%;
   --destructive: 0 78% 55%;
   --destructive-foreground: 0 0% 100%;
+  --radius: 12px;
+  color-scheme: light;
+}
+
+.dark {
+  --background: 225 28% 10%;
+  --foreground: 0 0% 96%;
+  --card: 222 22% 14%;
+  --card-foreground: 0 0% 96%;
+  --primary: 215 86% 54%;
+  --primary-foreground: 223 30% 10%;
+  --accent: 166 60% 40%;
+  --accent-foreground: 223 30% 10%;
+  --muted: 225 16% 22%;
+  --muted-foreground: 220 15% 70%;
+  --border: 225 16% 24%;
+  --ring: 215 86% 54%;
+  --destructive: 0 72% 52%;
+  --destructive-foreground: 0 0% 100%;
+  color-scheme: dark;
 }
 
 * {
@@ -35,4 +55,31 @@ body {
     radial-gradient(circle at 10% 80%, rgba(16, 185, 129, 0.12), transparent 40%),
     linear-gradient(140deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0));
   background-attachment: fixed;
+}
+
+.dark body {
+  background-image: radial-gradient(circle at 80% 10%, rgba(59, 130, 246, 0.2), transparent 40%),
+    radial-gradient(circle at 10% 80%, rgba(16, 185, 129, 0.14), transparent 45%),
+    linear-gradient(140deg, rgba(15, 23, 42, 0.6), rgba(15, 23, 42, 0));
+}
+
+@layer base {
+  h1 {
+    @apply text-3xl font-semibold tracking-tight md:text-4xl;
+  }
+  h2 {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+  h3 {
+    @apply text-xl font-semibold tracking-tight;
+  }
+  h4 {
+    @apply text-lg font-semibold;
+  }
+  h5 {
+    @apply text-base font-semibold;
+  }
+  h6 {
+    @apply text-sm font-semibold uppercase tracking-wide text-muted-foreground;
+  }
 }

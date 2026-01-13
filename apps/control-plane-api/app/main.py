@@ -169,13 +169,46 @@ def create_tenant(
 
 
 @router.get("/tenants")
-def list_tenants():
-    return {"items": []}
+def list_tenants(session: Session = Depends(get_session)):
+    tenants = session.execute(select(Tenant).order_by(Tenant.created_at.desc())).scalars().all()
+    return {
+        "items": [
+            {
+                "id": str(tenant.id),
+                "slug": tenant.slug,
+                "name": tenant.name,
+                "status": tenant.status,
+                "provisioning_state": tenant.provisioning_state,
+                "created_at": tenant.created_at.isoformat() if tenant.created_at else None,
+            }
+            for tenant in tenants
+        ]
+    }
 
 
 @router.get("/tenants/{tenant_id}")
-def get_tenant(tenant_id: str):
-    return {"id": tenant_id}
+def get_tenant(tenant_id: str, session: Session = Depends(get_session)):
+    try:
+        tenant_uuid = uuid.UUID(tenant_id)
+    except ValueError as exc:  # noqa: PERF203
+        raise HTTPException(status_code=422, detail="tenant_id must be a UUID") from exc
+    tenant = session.get(Tenant, tenant_uuid)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="tenant not found")
+    connection = session.execute(
+        select(TenantDbConnection)
+        .where(TenantDbConnection.tenant_id == tenant.id)
+        .where(TenantDbConnection.is_primary.is_(True))
+    ).scalar_one_or_none()
+    return {
+        "id": str(tenant.id),
+        "slug": tenant.slug,
+        "name": tenant.name,
+        "status": tenant.status,
+        "provisioning_state": tenant.provisioning_state,
+        "created_at": tenant.created_at.isoformat() if tenant.created_at else None,
+        "db_name": connection.db_name if connection else None,
+    }
 
 
 def _resolve_tenant_record(slug: str, session: Session) -> TenantRegistryResponse:

@@ -1,0 +1,39 @@
+"use client";
+
+import { useEffect } from "react";
+import Link from "next/link";
+
+import { Button } from "@/components/ui/button";
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    // No token logging.
+    console.error(error);
+  }, [error]);
+
+  return (
+    <div className="flex min-h-screen items-center justify-center px-6">
+      <div className="max-w-lg space-y-4 rounded-xl border border-border bg-card/80 p-8 text-center shadow-card">
+        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Something broke</p>
+        <h1 className="text-2xl font-semibold text-foreground">We hit an error</h1>
+        <p className="text-sm text-muted-foreground">
+          Try again or return to the dashboard.
+        </p>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button onClick={reset} variant="outline">
+            Retry
+          </Button>
+          <Button asChild>
+            <Link href="/">Go to dashboard</Link>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

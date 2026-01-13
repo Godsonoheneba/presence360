@@ -42,6 +42,20 @@ make lint
 make test
 ```
 
+## Playwright smoke tests
+```bash
+npm run e2e
+```
+Or:
+```bash
+make e2e
+```
+Optional env overrides:
+- `TENANT_WEB_BASE_URL` (default `http://localhost:3000`)
+- `CONTROL_PLANE_WEB_BASE_URL` (default `http://localhost:3001`)
+- `TENANT_DEV_TOKEN` (default `dev-tenant`)
+- `CONTROL_PLANE_DEV_TOKEN` (default `dev-super`)
+
 ## Ports and URLs
 - Tenant API: http://localhost:8000
 - Control Plane API: http://localhost:8001
