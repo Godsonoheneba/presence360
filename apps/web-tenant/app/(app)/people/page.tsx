@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import Link from "next/link";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PlusCircle } from "lucide-react";
 
@@ -16,6 +15,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { PermissionGate } from "@/components/auth/permission-gate";
 import { api } from "@/lib/api";
+import { analyzeImageFile, type ImageQualityHint } from "@/lib/image-quality";
 import type { Person } from "@/lib/types";
 
 export default function PeoplePage() {
@@ -25,8 +25,8 @@ export default function PeoplePage() {
   const [phone, setPhone] = useState("");
   const [consent, setConsent] = useState("consented");
   const [files, setFiles] = useState<File[]>([]);
-  const [search, setSearch] = useState("");
   const [consentFilter, setConsentFilter] = useState("all");
+  const [qualityHints, setQualityHints] = useState<ImageQualityHint[]>([]);
 
   const { data: peopleResponse, isLoading } = useQuery({
     queryKey: ["people"],
@@ -35,16 +35,67 @@ export default function PeoplePage() {
 
   const people = useMemo(() => peopleResponse?.items ?? [], [peopleResponse?.items]);
 
+  const faceStatusQueries = useQueries({
+    queries: people.map((person) => ({
+      queryKey: ["face-status", person.id],
+      queryFn: () =>
+        api.get<{ profiles: Array<{ status?: string; face_id?: string }> }>(
+          `/v1/people/${person.id}/faces/status`,
+        ),
+      enabled: people.length > 0,
+    })),
+  });
+
+  const faceStatusMap = useMemo(() => {
+    const entries = faceStatusQueries.map((query, index) => {
+      const person = people[index];
+      const profiles = query.data?.profiles ?? [];
+      const activeCount = profiles.filter((profile) => profile.status === "active").length;
+      return [person.id, { activeCount, total: profiles.length }];
+    });
+    return Object.fromEntries(entries);
+  }, [faceStatusQueries, people]);
+
   const filteredPeople = useMemo(() => {
     return people.filter((person) => {
-      const nameMatch = !search || (person.full_name ?? "").toLowerCase().includes(search.toLowerCase());
       const consentMatch = consentFilter === "all" || person.consent_status === consentFilter;
-      return nameMatch && consentMatch;
+      return consentMatch;
     });
-  }, [people, search, consentFilter]);
+  }, [people, consentFilter]);
+
+  const personRows = useMemo(
+    () =>
+      filteredPeople.map((person) => {
+        const status = faceStatusMap[person.id];
+        const faceStatus = status
+          ? status.activeCount > 0
+            ? `Enrolled (${status.activeCount})`
+            : "Not enrolled"
+          : "—";
+        return {
+          ...person,
+          typeLabel: "Member",
+          faceStatus,
+        };
+      }),
+    [faceStatusMap, filteredPeople],
+  );
+
+  useEffect(() => {
+    if (files.length === 0) {
+      setQualityHints([]);
+      return;
+    }
+    Promise.all(files.map((file) => analyzeImageFile(file)))
+      .then((results) => setQualityHints(results))
+      .catch(() => setQualityHints([]));
+  }, [files]);
 
   const enrollMutation = useMutation({
     mutationFn: async () => {
+      if (consent === "consented" && files.length > 0 && files.length < 3) {
+        throw new Error("Please upload at least 3 images for enrollment.");
+      }
       const payload = { name: fullName, phone, consent_status: consent };
       const person = await api.post<Person>("/v1/people", payload);
       if (consent === "consented") {
@@ -87,12 +138,6 @@ export default function PeoplePage() {
       >
       <Card className="bg-card/90">
         <CardContent className="flex flex-wrap items-center gap-3 pt-6">
-          <Input
-            placeholder="Search people"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="max-w-xs"
-          />
           <select
             className="h-10 rounded-lg border border-border bg-background px-3 text-sm"
             value={consentFilter}
@@ -122,8 +167,19 @@ export default function PeoplePage() {
             />
           ) : (
             <DataTable
+              searchKeys={["full_name", "consent_status"]}
               columns={[
                 { key: "full_name", header: "Name" },
+                {
+                  key: "typeLabel",
+                  header: "Type",
+                  render: (value) => String(value ?? "Member"),
+                },
+                {
+                  key: "faceStatus",
+                  header: "Face status",
+                  render: (value) => String(value ?? "—"),
+                },
                 {
                   key: "consent_status",
                   header: "Consent",
@@ -141,21 +197,15 @@ export default function PeoplePage() {
                     </Badge>
                   ),
                 },
-                { key: "id", header: "Person ID" },
+              ]}
+              data={personRows}
+              rowActions={(row) => [
+                { label: "View profile", href: `/people/${row.id}` },
                 {
-                  key: "id",
-                  header: "",
-                  render: (value) => (
-                    <Link
-                      href={`/people/${value}`}
-                      className="text-xs font-semibold text-primary hover:underline"
-                    >
-                      View
-                    </Link>
-                  ),
+                  label: "Copy person id",
+                  onClick: () => navigator.clipboard.writeText(row.id),
                 },
               ]}
-              data={filteredPeople}
             />
           )}
         </CardContent>
@@ -167,6 +217,10 @@ export default function PeoplePage() {
             <DialogTitle>Enroll a person</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+              Images are used to create face profiles in AWS Rekognition and are not stored by
+              Presence360.
+            </div>
             <Input
               placeholder="Full name"
               value={fullName}
@@ -191,6 +245,25 @@ export default function PeoplePage() {
               multiple
               onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
             />
+            {files.length > 0 ? (
+              <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                {files.length < 3 ? (
+                  <p className="font-semibold text-amber-500">
+                    At least 3 images are required for enrollment (3-6 recommended).
+                  </p>
+                ) : null}
+                {qualityHints.length > 0 ? (
+                  <ul className="mt-2 space-y-1">
+                    {qualityHints.map((hint) => (
+                      <li key={hint.fileName}>
+                        {hint.fileName}:{" "}
+                        {hint.warnings.length ? hint.warnings.join(", ") : "Looks good"}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>

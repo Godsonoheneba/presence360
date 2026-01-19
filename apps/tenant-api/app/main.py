@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 import logging
+import os
 import secrets
 import time
 import uuid
@@ -24,16 +25,15 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from .auth import get_current_user, get_gate_session
 from .config import get_settings
 from .crypto import encrypt_text, hash_text, normalize_phone
-from .face_provider import PROVIDER_NAME, get_face_provider
-from .logging_utils import clear_log_context, configure_logging, set_log_context
+from .face_provider import PROVIDER_NAME, ProviderNotConfiguredError, get_face_provider
+from .logging_utils import clear_log_context, configure_logging, get_request_id, set_log_context
 from .metrics import metrics_response, observe_request, record_task_result
-from .tenant_config import list_config, set_config_value
 from .models import (
     AuditLog,
     ConsentEvent,
@@ -45,18 +45,32 @@ from .models import (
     IdempotencyKey,
     MessageLog,
     MessageTemplate,
+    Permission,
     Person,
     RecognitionResult,
+    Role,
+    RolePermission,
     Rule,
     RuleRun,
+    User,
+    UserLocationScope,
+    UserRole,
 )
 from .otel import setup_otel
 from .tenancy import TenantResolutionError, get_tenant_context, resolve_tenant_from_request
+from .tenant_config import get_secret_config_value, list_config, set_config_value
 from .tenant_db import get_tenant_session
 from .worker import recognition_job, run_rule_job, send_message_job
 
 settings = get_settings()
-configure_logging("tenant-api", settings.log_level, settings.log_json)
+log_file_path = settings.log_file_path or os.path.join("logs", "dev-tenant-api.jsonl")
+configure_logging(
+    "tenant-api",
+    settings.log_level,
+    settings.log_json,
+    log_to_file=settings.log_to_file and settings.env == "dev",
+    log_file_path=log_file_path,
+)
 logger = logging.getLogger(__name__)
 setup_otel("tenant-api")
 if settings.env != "dev" and settings.auth_mode == "dev":
@@ -118,6 +132,7 @@ async def request_size_middleware(request: Request, call_next):
 @app.middleware("http")
 async def request_context_middleware(request: Request, call_next):
     request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    request.state.request_id = request_id
     set_log_context(request_id=request_id)
     start = time.monotonic()
     status_code = 500
@@ -142,13 +157,35 @@ async def request_context_middleware(request: Request, call_next):
             extra={
                 "method": request.method,
                 "path": request.url.path,
-                "status": status_code,
-                "duration_ms": int(duration * 1000),
+                "status_code": status_code,
+                "latency_ms": int(duration * 1000),
             },
         )
         clear_log_context()
         if response is not None:
             response.headers["X-Request-Id"] = request_id
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    request_id = getattr(request.state, "request_id", None) or get_request_id() or str(uuid.uuid4())
+    logger.exception(
+        "request.unhandled_exception",
+        extra={
+            "method": request.method,
+            "path": request.url.path,
+        },
+    )
+    response = JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_error",
+            "request_id": request_id,
+            "message": "See logs",
+        },
+    )
+    response.headers["X-Request-Id"] = request_id
+    return response
 
 
 @app.middleware("http")
@@ -188,6 +225,26 @@ def _parse_datetime(value: str) -> datetime:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed
+
+
+def _service_unavailable(
+    request: Request,
+    error_code: str,
+    *,
+    message: str | None = None,
+    missing: list[str] | None = None,
+) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None) or get_request_id() or str(
+        uuid.uuid4()
+    )
+    detail: dict[str, Any] = {"error": error_code, "request_id": request_id}
+    if message:
+        detail["message"] = message
+    if missing:
+        detail["missing"] = missing
+    response = JSONResponse(status_code=503, content=detail)
+    response.headers["X-Request-Id"] = request_id
+    return response
 
 
 def _hash_payload(
@@ -281,13 +338,25 @@ async def tenant_resolution_middleware(request: Request, call_next):
         or path.startswith("/redoc")
     ):
         return await call_next(request)
+    request_id = (
+        request.headers.get("x-request-id")
+        or getattr(request.state, "request_id", None)
+        or str(uuid.uuid4())
+    )
+    set_log_context(request_id=request_id)
     try:
         request.state.tenant = resolve_tenant_from_request(request)
         set_log_context(tenant_slug=request.state.tenant.slug)
     except TenantResolutionError as exc:
-        return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
+        response = JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
+        response.headers["X-Request-Id"] = request_id
+        clear_log_context()
+        return response
     except HTTPException as exc:
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        response = JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        response.headers["X-Request-Id"] = request_id
+        clear_log_context()
+        return response
     return await call_next(request)
 
 
@@ -312,29 +381,246 @@ def logout(payload: dict[str, Any] = Body(...)):
     return {"status": "ok", "details": payload}
 
 
+def _role_permissions_map(
+    session: Session, role_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[str]]:
+    if not role_ids:
+        return {}
+    rows = session.execute(
+        select(RolePermission.role_id, Permission.name)
+        .join(Permission, Permission.id == RolePermission.permission_id)
+        .where(RolePermission.role_id.in_(role_ids))
+    ).all()
+    mapping: dict[uuid.UUID, list[str]] = {}
+    for role_id, perm_name in rows:
+        mapping.setdefault(role_id, []).append(perm_name)
+    return mapping
+
+
+def _user_roles(session: Session, user_id: uuid.UUID) -> list[Role]:
+    return (
+        session.execute(
+            select(Role)
+            .join(UserRole, UserRole.role_id == Role.id)
+            .where(UserRole.user_id == user_id)
+            .where(UserRole.is_active.is_(True))
+        )
+        .scalars()
+        .all()
+    )
+
+
 @protected_router.get("/me")
-def me():
-    return {"user": "placeholder"}
+def me(session: Session = Depends(get_tenant_session)):
+    user = session.execute(select(User).order_by(User.created_at.asc())).scalars().first()
+    if not user:
+        return {"user": {"name": "Dev User", "roles": [], "permissions": []}}
+    roles = _user_roles(session, user.id)
+    role_names = [role.name for role in roles]
+    role_permissions = _role_permissions_map(session, [role.id for role in roles])
+    permissions = sorted({perm for perms in role_permissions.values() for perm in perms})
+    return {
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "roles": role_names,
+            "permissions": permissions,
+        },
+        "roles": role_names,
+        "permissions": permissions,
+    }
 
 
 @protected_router.get("/roles")
-def list_roles():
-    return {"items": []}
+def list_roles(session: Session = Depends(get_tenant_session)):
+    roles = session.execute(select(Role).order_by(Role.name.asc())).scalars().all()
+    role_permissions = _role_permissions_map(session, [role.id for role in roles])
+    return {
+        "items": [
+            {
+                "id": str(role.id),
+                "name": role.name,
+                "description": role.description,
+                "permissions": sorted(role_permissions.get(role.id, [])),
+            }
+            for role in roles
+        ]
+    }
 
 
 @protected_router.get("/permissions")
-def list_permissions():
-    return {"items": []}
+def list_permissions(session: Session = Depends(get_tenant_session)):
+    perms = session.execute(select(Permission).order_by(Permission.name.asc())).scalars().all()
+    return {
+        "items": [
+            {"id": str(perm.id), "name": perm.name, "description": perm.description}
+            for perm in perms
+        ]
+    }
+
+
+def _resolve_roles(session: Session, role_names: list[str]) -> list[Role]:
+    if not role_names:
+        return []
+    roles = session.execute(select(Role).where(Role.name.in_(role_names))).scalars().all()
+    if len(roles) != len(set(role_names)):
+        raise HTTPException(status_code=422, detail="One or more roles are invalid")
+    return roles
+
+
+def _assign_roles(session: Session, user_id: uuid.UUID, roles: list[Role]) -> list[str]:
+    session.execute(
+        update(UserRole).where(UserRole.user_id == user_id).values(is_active=False)
+    )
+    for role in roles:
+        session.add(UserRole(user_id=user_id, role_id=role.id, is_active=True))
+    return [role.name for role in roles]
+
+
+def _assign_location_scopes(
+    session: Session, user_id: uuid.UUID, location_ids: list[str]
+) -> list[str]:
+    session.execute(delete(UserLocationScope).where(UserLocationScope.user_id == user_id))
+    for location_id in location_ids:
+        session.add(UserLocationScope(user_id=user_id, location_id=location_id))
+    return location_ids
+
+
+@protected_router.get("/users")
+def list_users(
+    session: Session = Depends(get_tenant_session),
+    search: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    query = select(User).order_by(User.created_at.desc())
+    if search:
+        query = query.where(User.email.ilike(f"%{search}%"))
+    users = session.execute(query.offset(offset).limit(limit)).scalars().all()
+    user_ids = [user.id for user in users]
+    roles = []
+    if user_ids:
+        roles = session.execute(
+            select(UserRole.user_id, Role.name)
+            .join(Role, Role.id == UserRole.role_id)
+            .where(UserRole.user_id.in_(user_ids))
+            .where(UserRole.is_active.is_(True))
+        ).all()
+    roles_map: dict[uuid.UUID, list[str]] = {}
+    for user_id, role_name in roles:
+        roles_map.setdefault(user_id, []).append(role_name)
+    scopes = []
+    if user_ids:
+        scopes = session.execute(
+            select(UserLocationScope.user_id, UserLocationScope.location_id)
+            .where(UserLocationScope.user_id.in_(user_ids))
+        ).all()
+    scope_map: dict[uuid.UUID, list[str]] = {}
+    for user_id, location_id in scopes:
+        scope_map.setdefault(user_id, []).append(location_id)
+    return {
+        "items": [
+            {
+                "id": str(user.id),
+                "email": user.email,
+                "status": user.status,
+                "roles": sorted(roles_map.get(user.id, [])),
+                "location_ids": sorted(scope_map.get(user.id, [])),
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+            }
+            for user in users
+        ],
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @protected_router.post("/users")
-def create_user(payload: dict[str, Any] = Body(...)):
-    return {"status": "created", "details": payload}
+def create_user(
+    payload: dict[str, Any] = Body(...),
+    session: Session = Depends(get_tenant_session),
+):
+    email = payload.get("email")
+    if not email:
+        raise HTTPException(status_code=422, detail="email is required")
+    existing = session.execute(
+        select(User).where(User.email == email)
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="User already exists")
+    user = User(id=uuid.uuid4(), email=email, status=payload.get("status") or "invited")
+    session.add(user)
+    role_names = payload.get("roles") or ["Analyst"]
+    if not isinstance(role_names, list):
+        raise HTTPException(status_code=422, detail="roles must be a list")
+    roles = _resolve_roles(session, role_names)
+    assigned_roles = _assign_roles(session, user.id, roles)
+    location_ids = payload.get("location_ids") or []
+    if not isinstance(location_ids, list):
+        raise HTTPException(status_code=422, detail="location_ids must be a list")
+    assigned_locations = _assign_location_scopes(
+        session, user.id, [str(value) for value in location_ids]
+    )
+    session.commit()
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "status": user.status,
+        "roles": assigned_roles,
+        "location_ids": assigned_locations,
+    }
 
 
 @protected_router.patch("/users/{user_id}/roles")
-def update_user_roles(user_id: str, payload: dict[str, Any] = Body(...)):
-    return {"id": user_id, "status": "updated", "details": payload}
+def update_user_roles(
+    user_id: str,
+    payload: dict[str, Any] = Body(...),
+    session: Session = Depends(get_tenant_session),
+):
+    user = session.execute(
+        select(User).where(User.id == user_id)
+    ).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    role_names = payload.get("roles") or []
+    if not isinstance(role_names, list):
+        raise HTTPException(status_code=422, detail="roles must be a list")
+    roles = _resolve_roles(session, role_names)
+    assigned_roles = _assign_roles(session, user.id, roles)
+    location_ids = payload.get("location_ids")
+    assigned_locations = None
+    if location_ids is not None:
+        if not isinstance(location_ids, list):
+            raise HTTPException(status_code=422, detail="location_ids must be a list")
+        assigned_locations = _assign_location_scopes(
+            session, user.id, [str(value) for value in location_ids]
+        )
+    session.commit()
+    response = {"id": str(user.id), "roles": assigned_roles}
+    if assigned_locations is not None:
+        response["location_ids"] = assigned_locations
+    return response
+
+
+@protected_router.patch("/users/{user_id}/locations")
+def update_user_locations(
+    user_id: str,
+    payload: dict[str, Any] = Body(...),
+    session: Session = Depends(get_tenant_session),
+):
+    user = session.execute(
+        select(User).where(User.id == user_id)
+    ).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    location_ids = payload.get("location_ids")
+    if not isinstance(location_ids, list):
+        raise HTTPException(status_code=422, detail="location_ids must be a list")
+    assigned_locations = _assign_location_scopes(
+        session, user.id, [str(value) for value in location_ids]
+    )
+    session.commit()
+    return {"id": str(user.id), "location_ids": assigned_locations}
 
 
 @protected_router.get("/config")
@@ -534,7 +820,23 @@ def enroll_faces(
 
     tenant = get_tenant_context(request)
     collection_ref = tenant.tenant_id
-    provider = get_face_provider(collection_ref)
+    if len(images) < 3:
+        raise HTTPException(
+            status_code=422,
+            detail="at least 3 images are required for enrollment (recommended 3-6)",
+        )
+    try:
+        provider = get_face_provider(collection_ref)
+    except ProviderNotConfiguredError as exc:
+        logger.error(
+            "rekognition.not_configured",
+            extra={"missing": exc.missing, "collection_ref": collection_ref},
+        )
+        return _service_unavailable(
+            request,
+            exc.error_code,
+            missing=exc.missing,
+        )
     provider.ensure_collection()
     image_bytes_list = [image.file.read() for image in images]
     if not image_bytes_list:
@@ -595,9 +897,58 @@ def face_status(person_id: str, session: Session = Depends(get_tenant_session)):
                 "provider": profile.provider,
                 "face_id": profile.rekognition_face_id,
                 "status": profile.status,
+                "created_at": profile.created_at.isoformat() if profile.created_at else None,
             }
             for profile in profiles
         ],
+    }
+
+
+@protected_router.post("/people/{person_id}/faces/test")
+def test_face_match(
+    request: Request,
+    person_id: str,
+    image: UploadFile = File(...),
+    session: Session = Depends(get_tenant_session),
+):
+    try:
+        person_uuid = uuid.UUID(person_id)
+    except ValueError as exc:  # noqa: PERF203
+        raise HTTPException(status_code=422, detail="person_id must be a UUID") from exc
+    person = session.get(Person, person_uuid)
+    if not person:
+        raise HTTPException(status_code=404, detail="person not found")
+    image_bytes = image.file.read()
+    tenant = get_tenant_context(request)
+    try:
+        provider = get_face_provider(tenant.tenant_id)
+    except ProviderNotConfiguredError as exc:
+        logger.error(
+            "rekognition.not_configured",
+            extra={"missing": exc.missing, "collection_ref": tenant.tenant_id},
+        )
+        return _service_unavailable(
+            request,
+            exc.error_code,
+            missing=exc.missing,
+        )
+    provider.ensure_collection()
+    result = provider.recognize(image_bytes)
+    matched_person_id = None
+    if result.best_face_id:
+        profile = session.execute(
+            select(FaceProfile)
+            .where(FaceProfile.rekognition_face_id == result.best_face_id)
+            .where(FaceProfile.status == "active")
+        ).scalar_one_or_none()
+        if profile:
+            matched_person_id = str(profile.person_id)
+    decision = "matched" if matched_person_id else "unknown"
+    return {
+        "decision": decision,
+        "best_face_id": result.best_face_id,
+        "best_confidence": result.best_confidence,
+        "matched_person_id": matched_person_id,
     }
 
 
@@ -626,7 +977,18 @@ def delete_faces(
     if face_ids:
         tenant = get_tenant_context(request)
         collection_ref = tenant.tenant_id
-        provider = get_face_provider(collection_ref)
+        try:
+            provider = get_face_provider(collection_ref)
+        except ProviderNotConfiguredError as exc:
+            logger.error(
+                "rekognition.not_configured",
+                extra={"missing": exc.missing, "collection_ref": collection_ref},
+            )
+            return _service_unavailable(
+                request,
+                exc.error_code,
+                missing=exc.missing,
+            )
         provider.ensure_collection()
         provider.delete_face_ids(face_ids)
         now = _utcnow()
@@ -941,6 +1303,19 @@ def send_message(
     if not body:
         raise HTTPException(status_code=422, detail="body is required")
 
+    if settings.provider_mode.lower() != "mock":
+        api_key = get_secret_config_value(session, "mnotify_api_key")
+        if not api_key:
+            logger.error(
+                "messaging.not_configured",
+                extra={"missing": "mnotify_api_key"},
+            )
+            return _service_unavailable(
+                request,
+                "messaging_not_configured",
+                message="mnotify_api_key is missing",
+            )
+
     request_hash = _hash_message_payload(
         {
             "person_id": str(person.id) if person else None,
@@ -1227,6 +1602,20 @@ def gate_frames(
     except ValueError as exc:  # noqa: PERF203
         raise HTTPException(status_code=422, detail="face_present must be boolean") from exc
 
+    tenant = get_tenant_context(request)
+    try:
+        _ = get_face_provider(tenant.tenant_id)
+    except ProviderNotConfiguredError as exc:
+        logger.error(
+            "rekognition.not_configured",
+            extra={"missing": exc.missing, "collection_ref": tenant.tenant_id},
+        )
+        return _service_unavailable(
+            request,
+            exc.error_code,
+            missing=exc.missing,
+        )
+
     image_bytes = image.file.read()
     request_hash = _hash_payload(
         frame_id,
@@ -1268,7 +1657,6 @@ def gate_frames(
     session.add(gate_session)
     session.commit()
 
-    tenant = get_tenant_context(request)
     image_b64 = base64.b64encode(image_bytes).decode("ascii")
     recognition_job.delay(
         tenant.slug,

@@ -38,6 +38,8 @@ services:
       MAX_REQUEST_SIZE_BYTES: ${MAX_REQUEST_SIZE_BYTES:-5000000}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_JSON: ${LOG_JSON:-true}
+      LOG_TO_FILE: ${LOG_TO_FILE:-true}
+      LOG_FILE_PATH: /app/logs/dev-control-plane-api.jsonl
       METRICS_ENABLED: ${METRICS_ENABLED:-true}
       METRICS_PORT: ${METRICS_PORT:-9101}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
@@ -48,6 +50,7 @@ services:
       - redis
     volumes:
       - ./secrets:/run/secrets
+      - ./logs:/app/logs
     ports:
       - "8001:8000"
 
@@ -65,8 +68,8 @@ services:
       TENANT_SECRET_MNOTIFY_API_KEY: ${TENANT_SECRET_MNOTIFY_API_KEY:-}
       TENANT_SECRET_TENANT_DB_PASSWORD: ${TENANT_SECRET_TENANT_DB_PASSWORD:-}
       TENANT_REGISTRY_CACHE_TTL_SECONDS: ${TENANT_REGISTRY_CACHE_TTL_SECONDS}
-      PROVIDER_MODE: ${PROVIDER_MODE:-mock}
-      MESSAGING_MODE: ${MESSAGING_MODE:-mock}
+      PROVIDER_MODE: ${PROVIDER_MODE:-auto}
+      MESSAGING_MODE: ${MESSAGING_MODE:-mnotify}
       MNOTIFY_BASE_URL: ${MNOTIFY_BASE_URL}
       MNOTIFY_TIMEOUT_SECONDS: ${MNOTIFY_TIMEOUT_SECONDS}
       PHONE_ENCRYPTION_KEY: ${PHONE_ENCRYPTION_KEY}
@@ -78,6 +81,8 @@ services:
       MAX_REQUEST_SIZE_BYTES: ${MAX_REQUEST_SIZE_BYTES:-10000000}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_JSON: ${LOG_JSON:-true}
+      LOG_TO_FILE: ${LOG_TO_FILE:-true}
+      LOG_FILE_PATH: /app/logs/dev-tenant-api.jsonl
       METRICS_ENABLED: ${METRICS_ENABLED:-true}
       METRICS_PORT: ${METRICS_PORT:-9101}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
@@ -96,6 +101,7 @@ services:
       - redis
     volumes:
       - ./secrets:/run/secrets:ro
+      - ./logs:/app/logs
     ports:
       - "8000:8000"
 
@@ -112,14 +118,16 @@ services:
       TENANT_SECRET_MNOTIFY_API_KEY: ${TENANT_SECRET_MNOTIFY_API_KEY:-}
       TENANT_SECRET_TENANT_DB_PASSWORD: ${TENANT_SECRET_TENANT_DB_PASSWORD:-}
       TENANT_REGISTRY_CACHE_TTL_SECONDS: ${TENANT_REGISTRY_CACHE_TTL_SECONDS}
-      PROVIDER_MODE: ${PROVIDER_MODE:-mock}
-      MESSAGING_MODE: ${MESSAGING_MODE:-mock}
+      PROVIDER_MODE: ${PROVIDER_MODE:-auto}
+      MESSAGING_MODE: ${MESSAGING_MODE:-mnotify}
       MNOTIFY_BASE_URL: ${MNOTIFY_BASE_URL}
       MNOTIFY_TIMEOUT_SECONDS: ${MNOTIFY_TIMEOUT_SECONDS}
       PHONE_ENCRYPTION_KEY: ${PHONE_ENCRYPTION_KEY}
       PHONE_HASH_SECRET: ${PHONE_HASH_SECRET}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_JSON: ${LOG_JSON:-true}
+      LOG_TO_FILE: ${LOG_TO_FILE:-true}
+      LOG_FILE_PATH: /app/logs/dev-tenant-worker.jsonl
       METRICS_ENABLED: ${METRICS_ENABLED:-true}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-tenant-worker}
@@ -135,6 +143,7 @@ services:
       - tenant-api
     volumes:
       - ./secrets:/run/secrets:ro
+      - ./logs:/app/logs
 
   web-tenant:
     build: ./apps/web-tenant
@@ -159,7 +168,7 @@ services:
       NEXT_PUBLIC_APP_ENV: ${NEXT_PUBLIC_APP_ENV:-dev}
       NEXT_PUBLIC_DEV_SUPER_TOKEN: ${NEXT_PUBLIC_DEV_SUPER_TOKEN:-}
     ports:
-      - "3001:3000"
+      - "3001:3001"
     depends_on:
       - control-plane-api
 

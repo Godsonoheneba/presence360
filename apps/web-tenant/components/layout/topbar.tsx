@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
+import { SetupChecklistDrawer } from "@/components/layout/setup-checklist-drawer";
 
 export function TopBar({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   const { user, logout } = useAuth();
@@ -41,6 +42,7 @@ export function TopBar({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
       </div>
 
       <div className="flex items-center gap-2">
+        <SetupChecklistDrawer />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">

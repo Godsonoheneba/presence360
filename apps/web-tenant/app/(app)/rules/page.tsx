@@ -16,7 +16,6 @@ import { Input } from "@/components/ui/input";
 import { PermissionGate } from "@/components/auth/permission-gate";
 import { api } from "@/lib/api";
 import type { Rule } from "@/lib/types";
-import { RoleGate } from "@/components/auth/role-gate";
 
 export default function RulesPage() {
   const queryClient = useQueryClient();
@@ -56,7 +55,7 @@ export default function RulesPage() {
   });
 
   return (
-    <PermissionGate permissions={["rules.read"]}>
+    <PermissionGate permissions={["config.manage"]}>
       <PageShell
         title="Rules"
         description="Automated welcome and absence workflows."
@@ -83,6 +82,7 @@ export default function RulesPage() {
             />
           ) : (
             <DataTable
+              searchKeys={["name", "rule_type", "status"]}
               columns={[
                 { key: "name", header: "Rule" },
                 {
@@ -95,22 +95,18 @@ export default function RulesPage() {
                   ),
                 },
                 { key: "rule_type", header: "Type" },
-                {
-                  key: "id",
-                  header: "",
-                  render: (value) => (
-                    <RoleGate permissions={["rules.run"]}>
-                      <button
-                        className="text-xs font-semibold text-primary hover:underline"
-                        onClick={() => runRule.mutate(String(value))}
-                      >
-                        Run now
-                      </button>
-                    </RoleGate>
-                  ),
-                },
               ]}
               data={rules}
+              rowActions={(row) => [
+                {
+                  label: "Run now",
+                  onClick: () => runRule.mutate(String(row.id)),
+                },
+                {
+                  label: "Copy rule id",
+                  onClick: () => navigator.clipboard.writeText(String(row.id)),
+                },
+              ]}
             />
           )}
         </CardContent>

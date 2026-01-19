@@ -17,7 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { PermissionGate } from "@/components/auth/permission-gate";
 import { api } from "@/lib/api";
-import type { MessageLog } from "@/lib/types";
+import { formatDateTime } from "@/lib/format";
+import type { MessageLog, Person } from "@/lib/types";
 
 export default function MessagesPage() {
   const queryClient = useQueryClient();
@@ -30,6 +31,15 @@ export default function MessagesPage() {
     queryKey: ["message-logs"],
     queryFn: () => api.get<{ items: MessageLog[] }>("/v1/messages/logs"),
   });
+  const { data: peopleResponse } = useQuery({
+    queryKey: ["people"],
+    queryFn: () => api.get<{ items: Person[] }>("/v1/people"),
+  });
+
+  const peopleMap = useMemo(() => {
+    const items = peopleResponse?.items ?? [];
+    return Object.fromEntries(items.map((person) => [person.id, person]));
+  }, [peopleResponse?.items]);
 
   const logs = useMemo(() => {
     const items = logsResponse?.items ?? [];
@@ -54,7 +64,7 @@ export default function MessagesPage() {
   });
 
   return (
-    <PermissionGate permissions={["messages.read"]}>
+    <PermissionGate permissions={["messages.send"]}>
       <PageShell
         title="Messages"
         description="Queued and delivered SMS notifications."
@@ -101,8 +111,19 @@ export default function MessagesPage() {
             />
           ) : (
             <DataTable
+              searchKeys={["status", "person_id"]}
               columns={[
-                { key: "id", header: "Log ID" },
+                {
+                  key: "person_id",
+                  header: "Recipient",
+                  render: (value) => {
+                    if (!value) {
+                      return "Manual send";
+                    }
+                    const person = peopleMap[String(value)];
+                    return person?.full_name || "Person";
+                  },
+                },
                 { key: "channel", header: "Channel" },
                 {
                   key: "status",
@@ -114,23 +135,23 @@ export default function MessagesPage() {
                   ),
                 },
                 {
-                  key: "person_id",
-                  header: "Person",
-                  render: (value) =>
-                    value ? (
-                      <Link
-                        href={`/people/${value}`}
-                        className="text-xs font-semibold text-primary hover:underline"
-                      >
-                        View
-                      </Link>
-                    ) : (
-                      "-"
-                    ),
+                  key: "sent_at",
+                  header: "Sent",
+                  render: (value) => formatDateTime(value as string | null | undefined),
                 },
-                { key: "sent_at", header: "Sent" },
               ]}
               data={logs}
+              rowActions={(row) => [
+                {
+                  label: "View person",
+                  href: row.person_id ? `/people/${row.person_id}` : undefined,
+                  disabled: !row.person_id,
+                },
+                {
+                  label: "Copy log id",
+                  onClick: () => navigator.clipboard.writeText(row.id),
+                },
+              ]}
             />
           )}
         </CardContent>

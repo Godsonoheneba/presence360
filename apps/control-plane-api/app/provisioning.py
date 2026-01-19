@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import GlobalAuditLog, Tenant, TenantDbConnection
-from app.providers.rekognition import get_rekognition_provider
+from app.providers.rekognition import RekognitionNotConfiguredError, get_rekognition_provider
 from app.secrets import EnvSecretStore, FileSecretStore, SecretStore, SecretStoreError
 from app.tenant_schema import Permission, Role, RolePermission, User, UserRole
 
@@ -304,8 +304,15 @@ class TenantProvisioner:
             conn.execute(insert(UserRole), user_role_rows)
 
     def _create_rekognition_collection(self, tenant_id: str) -> None:
-        provider = get_rekognition_provider()
-        provider.create_collection(tenant_id)
+        try:
+            provider = get_rekognition_provider()
+            provider.create_collection(tenant_id)
+        except RekognitionNotConfiguredError as exc:
+            missing = ", ".join(exc.missing) if exc.missing else "AWS credentials"
+            raise ProvisioningError(
+                f"rekognition_not_configured: missing {missing}",
+                status_code=503,
+            ) from exc
 
     def _to_psycopg_dsn(self, url: URL) -> str:
         return url.set(drivername="postgresql").render_as_string(hide_password=False)

@@ -10,12 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
-import type { Tenant, TenantListResponse } from "@/lib/types";
+import { formatDateTime } from "@/lib/format";
+import type { TenantListResponse } from "@/lib/types";
 
 export default function TenantsPage() {
-  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
   const { data: tenantsResponse, isLoading } = useQuery({
@@ -27,11 +26,10 @@ export default function TenantsPage() {
 
   const filtered = useMemo(() => {
     return tenants.filter((tenant) => {
-      const nameMatch = !search || (tenant.slug ?? "").toLowerCase().includes(search.toLowerCase());
       const statusMatch = statusFilter === "all" || tenant.status === statusFilter;
-      return nameMatch && statusMatch;
+      return statusMatch;
     });
-  }, [tenants, search, statusFilter]);
+  }, [tenants, statusFilter]);
 
   return (
     <PageShell
@@ -46,12 +44,6 @@ export default function TenantsPage() {
     >
       <Card className="bg-card/90">
         <CardContent className="flex flex-wrap items-center gap-3 pt-6">
-          <Input
-            placeholder="Search by slug"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="max-w-xs"
-          />
           <select
             className="h-10 rounded-lg border border-border bg-background px-3 text-sm"
             value={statusFilter}
@@ -84,9 +76,18 @@ export default function TenantsPage() {
             />
           ) : (
             <DataTable
+              searchKeys={["slug", "name", "status"]}
               columns={[
-                { key: "slug", header: "Slug" },
-                { key: "name", header: "Name" },
+                {
+                  key: "name",
+                  header: "Tenant",
+                  render: (value, row) => (
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{String(value ?? "Tenant")}</p>
+                      <p className="text-xs text-muted-foreground">{row.slug ?? "-"}</p>
+                    </div>
+                  ),
+                },
                 {
                   key: "status",
                   header: "Status",
@@ -109,21 +110,20 @@ export default function TenantsPage() {
                     </Badge>
                   ),
                 },
-                { key: "id", header: "Tenant ID" },
                 {
-                  key: "id",
-                  header: "",
-                  render: (value) => (
-                    <Link
-                      href={`/tenants/${value}`}
-                      className="text-xs font-semibold text-primary hover:underline"
-                    >
-                      View
-                    </Link>
-                  ),
+                  key: "created_at",
+                  header: "Created",
+                  render: (value) => formatDateTime(value as string | null | undefined),
                 },
               ]}
               data={filtered}
+              rowActions={(row) => [
+                { label: "View tenant", href: `/tenants/${row.id}` },
+                {
+                  label: "Copy tenant id",
+                  onClick: () => navigator.clipboard.writeText(String(row.id)),
+                },
+              ]}
             />
           )}
         </CardContent>

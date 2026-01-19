@@ -43,6 +43,7 @@ def _setup_tenant(monkeypatch, tenant_registry_payload):
     os.environ["SECRET_STORE_PATH"] = str(secret_file)
     os.environ["CELERY_TASK_ALWAYS_EAGER"] = "true"
     os.environ["CELERY_TASK_EAGER_PROPAGATES"] = "true"
+    os.environ["PROVIDER_MODE"] = "mock"
     os.environ["MESSAGING_MODE"] = "mock"
     get_settings.cache_clear()
     get_session_manager.cache_clear()

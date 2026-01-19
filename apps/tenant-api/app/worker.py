@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import logging
+import os
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -13,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .config import get_settings
 from .crypto import decrypt_text
-from .face_provider import PROVIDER_NAME, get_face_provider
+from .face_provider import PROVIDER_NAME, ProviderNotConfiguredError, get_face_provider
 from .logging_utils import clear_log_context, configure_logging, set_log_context
 from .messaging_provider import get_messaging_provider
 from .metrics import record_message_send, record_recognition_decision, record_task_result
@@ -39,7 +40,14 @@ from .tenant_db import get_session_manager
 from .tenant_registry import get_registry_client
 
 settings = get_settings()
-configure_logging("tenant-worker", settings.log_level, settings.log_json)
+log_file_path = settings.log_file_path or os.path.join("logs", "dev-tenant-worker.jsonl")
+configure_logging(
+    "tenant-worker",
+    settings.log_level,
+    settings.log_json,
+    log_to_file=settings.log_to_file and settings.env == "dev",
+    log_file_path=log_file_path,
+)
 logger = logging.getLogger(__name__)
 setup_otel("tenant-worker")
 
@@ -195,11 +203,15 @@ def recognition_job(
     frame_uuid = uuid.UUID(frame_id)
     session_uuid = uuid.UUID(session_id) if session_id else None
     try:
-        min_confidence = float(get_config_value(session, "rekognition_min_confidence", 90))
+        threshold = get_config_value(session, "recognition_threshold", None)
+        if threshold is not None:
+            min_confidence = float(threshold)
+            if min_confidence <= 1:
+                min_confidence *= 100
+        else:
+            min_confidence = float(get_config_value(session, "rekognition_min_confidence", 90))
         _ = get_config_value(session, "dedupe_window_seconds", 300)
         collection_ref = context.tenant_id
-        provider = get_face_provider(collection_ref)
-        provider.ensure_collection()
         best_face_id = None
         best_confidence = None
         matches: list[dict[str, float | str]] = []
@@ -211,38 +223,50 @@ def recognition_job(
             rejection_reason = "no_face"
         else:
             try:
-                image_bytes = base64.b64decode(image_b64.encode("ascii"))
-                # Guardrail: never persist raw image bytes.
-                result = provider.recognize(image_bytes)
-                del image_bytes
-                best_face_id = result.best_face_id
-                best_confidence = result.best_confidence
-                matches = [
-                    {"face_id": match.face_id, "confidence": match.confidence}
-                    for match in result.matches
-                ]
-                if best_face_id and best_confidence is not None:
-                    if best_confidence >= min_confidence:
-                        profile = session.execute(
-                            select(FaceProfile).where(
-                                FaceProfile.provider == PROVIDER_NAME,
-                                FaceProfile.rekognition_face_id == best_face_id,
-                                FaceProfile.status == "active",
-                            )
-                        ).scalar_one_or_none()
-                        if profile:
-                            decision = "matched"
-                            person_id = profile.person_id
-                        else:
-                            rejection_reason = "no_match"
-                    else:
-                        rejection_reason = "below_threshold"
-                else:
-                    rejection_reason = "no_match"
-            except Exception as exc:  # noqa: BLE001
+                provider = get_face_provider(collection_ref)
+                provider.ensure_collection()
+            except ProviderNotConfiguredError as exc:
+                logger.error(
+                    "rekognition.not_configured",
+                    extra={"missing": exc.missing, "collection_ref": collection_ref},
+                )
                 decision = "error"
                 rejection_reason = "error"
-                provider_code = exc.__class__.__name__
+                provider_code = exc.error_code
+            else:
+                try:
+                    image_bytes = base64.b64decode(image_b64.encode("ascii"))
+                    # Guardrail: never persist raw image bytes.
+                    result = provider.recognize(image_bytes)
+                    del image_bytes
+                    best_face_id = result.best_face_id
+                    best_confidence = result.best_confidence
+                    matches = [
+                        {"face_id": match.face_id, "confidence": match.confidence}
+                        for match in result.matches
+                    ]
+                    if best_face_id and best_confidence is not None:
+                        if best_confidence >= min_confidence:
+                            profile = session.execute(
+                                select(FaceProfile).where(
+                                    FaceProfile.provider == PROVIDER_NAME,
+                                    FaceProfile.rekognition_face_id == best_face_id,
+                                    FaceProfile.status == "active",
+                                )
+                            ).scalar_one_or_none()
+                            if profile:
+                                decision = "matched"
+                                person_id = profile.person_id
+                            else:
+                                rejection_reason = "no_match"
+                        else:
+                            rejection_reason = "below_threshold"
+                    else:
+                        rejection_reason = "no_match"
+                except Exception as exc:  # noqa: BLE001
+                    decision = "error"
+                    rejection_reason = "error"
+                    provider_code = exc.__class__.__name__
         processed_at = datetime.now(timezone.utc)
         latency_ms = int((time.monotonic() - start) * 1000)
         recognition = RecognitionResult(
@@ -346,18 +370,19 @@ def send_message_job(tenant_slug: str, message_log_id: str, body: str | None = N
 
         provider = get_messaging_provider()
         sender_id = get_config_value(session, "mnotify_sender_id")
-        api_key = get_secret_config_value(session, "mnotify_api_key") or ""
-        if (
-            settings.provider_mode == "live"
-            and settings.messaging_mode == "mnotify"
-            and not api_key
-        ):
+        api_key = get_secret_config_value(session, "mnotify_api_key")
+        if settings.provider_mode.lower() != "mock" and not api_key:
+            logger.error(
+                "messaging.not_configured",
+                extra={"missing": "mnotify_api_key"},
+            )
             log.status = "failed"
-            log.error_code = "missing_api_key"
+            log.error_code = "messaging_not_configured"
             session.commit()
             record_message_send("tenant-worker", "failed")
             record_task_result("tenant-worker", "send_message_job", "error")
             return message_log_id
+        api_key = api_key or ""
         result = provider.send_sms(
             to_phone=to_phone,
             body=body,

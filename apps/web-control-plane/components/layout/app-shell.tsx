@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { TopBar } from "@/components/layout/topbar";
+import { NavigationProgress } from "@/components/layout/navigation-progress";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +35,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen">
+      <NavigationProgress />
       <div className="flex">
         <aside
           className={cn(

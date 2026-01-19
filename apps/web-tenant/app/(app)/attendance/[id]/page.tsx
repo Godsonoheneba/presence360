@@ -20,7 +20,8 @@ import { PermissionGate } from "@/components/auth/permission-gate";
 import { api } from "@/lib/api";
 import { downloadCsv } from "@/lib/download";
 import { RoleGate } from "@/components/auth/role-gate";
-import type { RecognitionResult, VisitEvent } from "@/lib/types";
+import { formatConfidence, formatDateTime, formatSessionLabel } from "@/lib/format";
+import type { Gate, Location, Person, RecognitionResult, Service, ServiceSession, VisitEvent } from "@/lib/types";
 
 export default function AttendanceSessionPage() {
   const params = useParams();
@@ -31,6 +32,27 @@ export default function AttendanceSessionPage() {
     queryKey: ["attendance", sessionId],
     queryFn: () => api.get<{ totals?: Record<string, unknown> }>(`/v1/sessions/${sessionId}/attendance`),
     enabled: Boolean(sessionId),
+  });
+
+  const { data: sessionsResponse } = useQuery({
+    queryKey: ["sessions"],
+    queryFn: () => api.get<{ items: ServiceSession[] }>("/v1/sessions"),
+  });
+  const { data: servicesResponse } = useQuery({
+    queryKey: ["services"],
+    queryFn: () => api.get<{ items: Service[] }>("/v1/services"),
+  });
+  const { data: locationsResponse } = useQuery({
+    queryKey: ["locations"],
+    queryFn: () => api.get<{ items: Location[] }>("/v1/locations"),
+  });
+  const { data: gatesResponse } = useQuery({
+    queryKey: ["gates"],
+    queryFn: () => api.get<{ items: Gate[] }>("/v1/gates"),
+  });
+  const { data: peopleResponse } = useQuery({
+    queryKey: ["people"],
+    queryFn: () => api.get<{ items: Person[] }>("/v1/people"),
   });
 
   const { data: eventsResponse } = useQuery({
@@ -46,6 +68,32 @@ export default function AttendanceSessionPage() {
   const events = eventsResponse?.items ?? [];
   const recognitions = recognitionResponse?.items ?? [];
   const totals = attendanceResponse?.totals ?? {};
+  const sessions = sessionsResponse?.items ?? [];
+  const services = servicesResponse?.items ?? [];
+  const locations = locationsResponse?.items ?? [];
+  const gates = gatesResponse?.items ?? [];
+  const people = peopleResponse?.items ?? [];
+
+  const serviceMap = Object.fromEntries(services.map((service) => [service.id, service]));
+  const locationMap = Object.fromEntries(locations.map((location) => [location.id, location]));
+  const gateMap = Object.fromEntries(gates.map((gate) => [gate.id, gate]));
+  const peopleMap = Object.fromEntries(people.map((person) => [person.id, person]));
+  const currentSession = sessions.find((item) => item.id === sessionId);
+  const sessionLabel = currentSession
+    ? formatSessionLabel(currentSession, serviceMap, locationMap)
+    : sessionId;
+  const sessionStatus = currentSession?.status ?? "scheduled";
+  const sessionLocationName = currentSession?.service_id
+    ? locationMap[serviceMap[currentSession.service_id]?.location_id ?? ""]?.name
+    : undefined;
+  const eventRows = events.map((event) => ({
+    ...event,
+    location_name: sessionLocationName ?? "—",
+  }));
+  const recognitionRows = recognitions.map((recognition) => ({
+    ...recognition,
+    location_name: sessionLocationName ?? "—",
+  }));
 
   const handleExport = async () => {
     setExporting(true);
@@ -60,14 +108,14 @@ export default function AttendanceSessionPage() {
   };
 
   return (
-    <PermissionGate permissions={["attendance.read"]}>
+    <PermissionGate permissions={["reports.read"]}>
       <PageShell
         title="Session detail"
         description="Rollups, arrivals, and recognition results for this service session."
         breadcrumbs={[
           { label: "Dashboard", href: "/" },
           { label: "Attendance", href: "/attendance" },
-          { label: sessionId },
+          { label: sessionLabel },
         ]}
         action={
           <div className="flex flex-wrap gap-2">
@@ -100,8 +148,8 @@ export default function AttendanceSessionPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-3">
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Session ID</p>
-                <p className="mt-2 text-sm font-semibold text-foreground">{sessionId}</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Session</p>
+                <p className="mt-2 text-sm font-semibold text-foreground">{sessionLabel}</p>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Totals</p>
@@ -111,7 +159,7 @@ export default function AttendanceSessionPage() {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Status</p>
-                <Badge className="mt-2">Live</Badge>
+                <Badge className="mt-2">{sessionStatus}</Badge>
               </div>
             </div>
           )}
@@ -135,16 +183,48 @@ export default function AttendanceSessionPage() {
                 />
               ) : (
                 <DataTable
+                  searchKeys={["id", "person_id"]}
                   columns={[
-                    { key: "id", header: "Event ID" },
                     {
                       key: "person_id",
                       header: "Person",
-                      render: (value) => (value ? "Matched" : "Unknown"),
+                      render: (value) => {
+                        if (!value) {
+                          return "Unknown";
+                        }
+                        const person = peopleMap[String(value)];
+                        return person?.full_name || "Matched";
+                      },
                     },
-                    { key: "captured_at", header: "Captured" },
+                    {
+                      key: "gate_id",
+                      header: "Gate",
+                      render: (value) => gateMap[String(value)]?.name ?? "Unknown gate",
+                    },
+                    {
+                      key: "location_name",
+                      header: "Location",
+                      render: (value) => String(value ?? "—"),
+                    },
+                    {
+                      key: "captured_at",
+                      header: "Captured",
+                      render: (value) => formatDateTime(value as string | null | undefined),
+                    },
                   ]}
-                  data={events}
+                  data={eventRows}
+                  rowActions={(row) => [
+                    {
+                      label: "View person",
+                      href: row.person_id ? `/people/${row.person_id}` : undefined,
+                      disabled: !row.person_id,
+                    },
+                    {
+                      label: "Copy event id",
+                      onClick: () => navigator.clipboard.writeText(String(row.id ?? "")),
+                      disabled: !row.id,
+                    },
+                  ]}
                 />
               )}
             </CardContent>
@@ -161,8 +241,19 @@ export default function AttendanceSessionPage() {
                 />
               ) : (
                 <DataTable
+                  searchKeys={["frame_id", "person_id"]}
                   columns={[
-                    { key: "frame_id", header: "Frame" },
+                    {
+                      key: "person_id",
+                      header: "Person",
+                      render: (value) => {
+                        if (!value) {
+                          return "Unknown";
+                        }
+                        const person = peopleMap[String(value)];
+                        return person?.full_name || "Matched";
+                      },
+                    },
                     {
                       key: "decision",
                       header: "Decision",
@@ -172,10 +263,35 @@ export default function AttendanceSessionPage() {
                         </Badge>
                       ),
                     },
-                    { key: "best_confidence", header: "Confidence" },
-                    { key: "processed_at", header: "Processed" },
+                    {
+                      key: "best_confidence",
+                      header: "Confidence",
+                      render: (value) => formatConfidence(value as number | null | undefined),
+                    },
+                    {
+                      key: "location_name",
+                      header: "Location",
+                      render: (value) => String(value ?? "—"),
+                    },
+                    {
+                      key: "processed_at",
+                      header: "Processed",
+                      render: (value) => formatDateTime(value as string | null | undefined),
+                    },
                   ]}
-                  data={recognitions}
+                  data={recognitionRows}
+                  rowActions={(row) => [
+                    {
+                      label: "View person",
+                      href: row.person_id ? `/people/${row.person_id}` : undefined,
+                      disabled: !row.person_id,
+                    },
+                    {
+                      label: "Copy frame id",
+                      onClick: () => navigator.clipboard.writeText(String(row.frame_id ?? "")),
+                      disabled: !row.frame_id,
+                    },
+                  ]}
                 />
               )}
             </CardContent>

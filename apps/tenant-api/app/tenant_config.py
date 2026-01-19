@@ -11,10 +11,12 @@ from .secret_store import SecretStoreError
 from .tenant_db import get_secret_store
 
 DEFAULT_CONFIG: dict[str, Any] = {
+    "recognition_threshold": 0.9,
     "rekognition_min_confidence": 90,
     "dedupe_window_seconds": 300,
     "sms_enabled": True,
     "mnotify_sender_id": None,
+    "enable_real_providers": False,
     "absence_threshold_sessions": 6,
     "absence_threshold_weeks": 3,
     "absence_threshold_mode": "sessions",

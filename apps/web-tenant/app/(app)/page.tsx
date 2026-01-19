@@ -8,6 +8,7 @@ import { Activity, MessageSquare, Users, Workflow } from "lucide-react";
 
 import { LineChartCard } from "@/components/charts/line-chart";
 import { PageShell } from "@/components/layout/page-shell";
+import { SetupChecklistDrawer } from "@/components/layout/setup-checklist-drawer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard } from "@/components/ui/stat-card";
 import { api } from "@/lib/api";
 import { configItemsToMap } from "@/lib/config";
+import { formatConfidence, formatDateTime } from "@/lib/format";
 import type { FollowupTask, MessageLog, RecognitionResult, TenantConfigItem, VisitEvent } from "@/lib/types";
 
 function groupByDay(entries: { timestamp?: string | null }[]) {
@@ -75,18 +77,6 @@ export default function DashboardPage() {
     queryKey: ["config"],
     queryFn: () => api.get<{ items: TenantConfigItem[] }>("/v1/config"),
   });
-  const { data: locations } = useQuery({
-    queryKey: ["locations"],
-    queryFn: () => api.get<{ items: unknown[] }>("/v1/locations"),
-  });
-  const { data: gates } = useQuery({
-    queryKey: ["gates"],
-    queryFn: () => api.get<{ items: unknown[] }>("/v1/gates"),
-  });
-  const { data: services } = useQuery({
-    queryKey: ["services"],
-    queryFn: () => api.get<{ items: unknown[] }>("/v1/services"),
-  });
 
   const visitEvents = useMemo(() => eventsResponse?.items ?? [], [eventsResponse?.items]);
   const recognitions = useMemo(() => recognitionResponse?.items ?? [], [recognitionResponse?.items]);
@@ -98,11 +88,7 @@ export default function DashboardPage() {
     dismissed?: boolean;
   };
 
-  const needsSetup =
-    !onboardingState.completed &&
-    (locations?.items?.length ?? 0) === 0 &&
-    (gates?.items?.length ?? 0) === 0 &&
-    (services?.items?.length ?? 0) === 0;
+  const needsSetup = !onboardingState.completed;
 
   const arrivalsToday = visitEvents.length;
   const unknownArrivals = recognitions.filter((item) => item.decision === "unknown").length;
@@ -123,7 +109,7 @@ export default function DashboardPage() {
     const recItems = recognitions.slice(0, 4).map((item) => ({
       id: item.frame_id ?? "",
       label: item.decision === "matched" ? "Matched arrival" : "Unknown arrival",
-      detail: item.best_confidence ? `Confidence ${item.best_confidence}` : "No confidence",
+      detail: item.best_confidence ? `Confidence ${formatConfidence(item.best_confidence)}` : "No confidence",
       timestamp: item.processed_at,
     }));
     const msgItems = messages.slice(0, 3).map((item) => ({
@@ -143,16 +129,19 @@ export default function DashboardPage() {
     >
       {needsSetup ? (
         <Card className="bg-card/90">
-          <CardContent className="pt-5">
-            <EmptyState
-              title="Finish your setup"
-              description="Complete onboarding to start capturing attendance and messaging."
-              action={
-                <Button asChild>
-                  <Link href="/onboarding">Continue onboarding</Link>
-                </Button>
-              }
-            />
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-5">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Finish your setup</p>
+              <p className="text-xs text-muted-foreground">
+                Complete onboarding to start capturing attendance and messaging.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button asChild>
+                <Link href="/onboarding">Continue onboarding</Link>
+              </Button>
+              <SetupChecklistDrawer />
+            </div>
           </CardContent>
         </Card>
       ) : null}
@@ -220,6 +209,11 @@ export default function DashboardPage() {
                   <div key={item.id} className="rounded-xl border border-border bg-muted/40 p-3 text-sm">
                     <p className="font-semibold text-foreground">{item.label}</p>
                     <p className="text-xs text-muted-foreground">{item.detail}</p>
+                    {item.timestamp ? (
+                      <p className="text-[11px] text-muted-foreground">
+                        {formatDateTime(item.timestamp)}
+                      </p>
+                    ) : null}
                   </div>
                 ))}
               </div>

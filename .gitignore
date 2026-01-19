@@ -80,6 +80,11 @@ pnpm-debug.log*
 # ---- Logs / Runtime ----
 *.log
 logs/
+!logs/.gitkeep
+
+# ---- Real smoke test assets ----
+scripts/fixtures/real_faces/*
+!scripts/fixtures/real_faces/.gitkeep
 *.pid
 celerybeat-schedule
 celerybeat.pid

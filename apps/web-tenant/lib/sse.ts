@@ -4,6 +4,7 @@ type StreamOptions = {
   headers?: Record<string, string>;
   signal?: AbortSignal;
   onEvent: EventHandler;
+  onOpen?: () => void;
 };
 
 export async function streamSse(url: string, options: StreamOptions) {
@@ -16,6 +17,7 @@ export async function streamSse(url: string, options: StreamOptions) {
   if (!response.ok || !response.body) {
     throw new Error(`SSE connection failed (${response.status})`);
   }
+  options.onOpen?.();
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();

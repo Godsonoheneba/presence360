@@ -39,6 +39,7 @@ def _setup_tenant(monkeypatch, tenant_registry_payload):
     os.environ["ENV"] = "dev"
     os.environ["SECRET_STORE_BACKEND"] = "file"
     os.environ["SECRET_STORE_PATH"] = str(secret_file)
+    os.environ["PROVIDER_MODE"] = "mock"
     os.environ["REKOGNITION_MODE"] = "mock"
     get_settings.cache_clear()
     get_session_manager.cache_clear()
@@ -98,7 +99,11 @@ def test_enroll_and_match(monkeypatch, tenant_registry_payload):
     enroll = client.post(
         f"/v1/people/{person_id}/faces",
         headers={"X-Tenant-Slug": "grace", "Authorization": f"Bearer {token}"},
-        files=[("images", ("face.jpg", b"face-image", "image/jpeg"))],
+        files=[
+            ("images", ("face1.jpg", b"face-image-1", "image/jpeg")),
+            ("images", ("face2.jpg", b"face-image-2", "image/jpeg")),
+            ("images", ("face3.jpg", b"face-image-3", "image/jpeg")),
+        ],
     )
     assert enroll.status_code == 200
     face_ids = enroll.json()["face_ids"]

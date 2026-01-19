@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Activity, LayoutDashboard, PlusCircle, Server, Shield } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -37,6 +37,7 @@ export function SidebarNav({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
 
   return (
     <nav className="flex-1 space-y-6 px-3 pb-6">
@@ -55,7 +56,9 @@ export function SidebarNav({
                 <Link
                   key={item.href}
                   href={item.href}
+                  aria-label={item.title}
                   onClick={onNavigate}
+                  onMouseEnter={() => router.prefetch(item.href)}
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors",
                     active && "bg-muted text-foreground",

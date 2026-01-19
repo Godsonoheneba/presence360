@@ -35,7 +35,7 @@ class FileSecretStore:
             except json.JSONDecodeError as exc:  # noqa: PERF203
                 raise SecretStoreError("Secret store is invalid", status_code=500) from exc
         if secret_ref not in data:
-            raise SecretStoreError("Secret ref not found", status_code=404)
+            raise SecretStoreError(f"Secret ref not found: {secret_ref}", status_code=404)
         value = data.get(secret_ref)
         return _extract_secret_value(value)
 
@@ -68,7 +68,7 @@ class EnvSecretStore:
         env_key = _env_key_from_ref(secret_ref, self.prefix)
         if env_key and os.environ.get(env_key):
             return os.environ[env_key]
-        raise SecretStoreError("Secret ref not found", status_code=404)
+        raise SecretStoreError(f"Secret ref not found: {secret_ref}", status_code=404)
 
     def tenant_db_password_ref(self) -> str:
         return "tenant_db_password"
@@ -80,7 +80,7 @@ class InMemorySecretStore:
 
     def get(self, secret_ref: str) -> str:
         if secret_ref not in self.data:
-            raise SecretStoreError("Secret ref not found", status_code=404)
+            raise SecretStoreError(f"Secret ref not found: {secret_ref}", status_code=404)
         return _extract_secret_value(self.data.get(secret_ref))
 
 

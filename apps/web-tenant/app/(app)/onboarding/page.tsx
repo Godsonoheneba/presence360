@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import {
   MonitorPlay,
   PlayCircle,
   ShieldCheck,
+  SlidersHorizontal,
   Users,
 } from "lucide-react";
 
@@ -27,6 +28,7 @@ import { api } from "@/lib/api";
 import { configItemsToMap } from "@/lib/config";
 import { generateId } from "@/lib/id";
 import { getActiveSessionId, setActiveSessionId } from "@/lib/active-session";
+import { analyzeImageFile, type ImageQualityHint } from "@/lib/image-quality";
 import { loadLocalItems, mergeById, upsertLocalItem } from "@/lib/local-store";
 import type {
   Camera as CameraType,
@@ -39,6 +41,7 @@ import type {
 } from "@/lib/types";
 
 const STEPS = [
+  { key: "settings", title: "Preflight settings", icon: SlidersHorizontal },
   { key: "profile", title: "Tenant profile & defaults", icon: ShieldCheck },
   { key: "location", title: "Create location", icon: MapPin },
   { key: "gate", title: "Create gate", icon: DoorOpen },
@@ -95,7 +98,7 @@ function resolveStepCompletion(
 
 export default function OnboardingPage() {
   const queryClient = useQueryClient();
-  const [activeStep, setActiveStep] = useState<StepKey>("profile");
+  const [activeStep, setActiveStep] = useState<StepKey>("settings");
   const [locationName, setLocationName] = useState("");
   const [locationAddress, setLocationAddress] = useState("");
   const [gateName, setGateName] = useState("");
@@ -105,6 +108,11 @@ export default function OnboardingPage() {
   const [personName, setPersonName] = useState("");
   const [personPhone, setPersonPhone] = useState("");
   const [faces, setFaces] = useState<File[]>([]);
+  const [faceQualityHints, setFaceQualityHints] = useState<ImageQualityHint[]>([]);
+  const [recognitionThreshold, setRecognitionThreshold] = useState("0.9");
+  const [dedupeWindow, setDedupeWindow] = useState("300");
+  const [senderId, setSenderId] = useState("");
+  const [enableRealProviders, setEnableRealProviders] = useState(false);
 
   const { data: configResponse } = useQuery({
     queryKey: ["config"],
@@ -139,6 +147,41 @@ export default function OnboardingPage() {
     () => configItemsToMap(configResponse?.items ?? []),
     [configResponse?.items],
   );
+  const settingsInitialized = useRef(false);
+
+  useEffect(() => {
+    if (settingsInitialized.current || !configResponse) {
+      return;
+    }
+    settingsInitialized.current = true;
+    const threshold =
+      configMap.recognition_threshold ??
+      (typeof configMap.rekognition_min_confidence === "number"
+        ? Number(configMap.rekognition_min_confidence) / 100
+        : undefined);
+    if (threshold !== undefined) {
+      setRecognitionThreshold(String(threshold));
+    }
+    if (configMap.dedupe_window_seconds !== undefined) {
+      setDedupeWindow(String(configMap.dedupe_window_seconds));
+    }
+    if (configMap.mnotify_sender_id) {
+      setSenderId(String(configMap.mnotify_sender_id));
+    }
+    if (configMap.enable_real_providers !== undefined) {
+      setEnableRealProviders(Boolean(configMap.enable_real_providers));
+    }
+  }, [configMap, configResponse]);
+
+  useEffect(() => {
+    if (faces.length === 0) {
+      setFaceQualityHints([]);
+      return;
+    }
+    Promise.all(faces.map((file) => analyzeImageFile(file)))
+      .then((results) => setFaceQualityHints(results))
+      .catch(() => setFaceQualityHints([]));
+  }, [faces]);
 
   const onboardingState = (configMap.onboarding_state ?? {}) as OnboardingState;
   const storedSteps = useMemo(() => onboardingState.steps ?? {}, [onboardingState.steps]);
@@ -189,7 +232,12 @@ export default function OnboardingPage() {
       acc[step.key] = Boolean(storedSteps[step.key]);
       return acc;
     }, {});
+    const settingsConfigured = defaults.settings;
     return STEPS.reduce<Record<string, boolean>>((acc, step) => {
+      if (step.key === "settings") {
+        acc[step.key] = settingsConfigured;
+        return acc;
+      }
       acc[step.key] = resolveStepCompletion(step.key, defaults, {
         locations,
         gates,
@@ -235,6 +283,31 @@ export default function OnboardingPage() {
 
   const markStepDone = async (step: StepKey) => {
     await updateOnboardingState({ steps: { [step]: true } });
+  };
+
+  const saveSettings = async () => {
+    const parsedThreshold = Number(recognitionThreshold);
+    if (Number.isNaN(parsedThreshold) || parsedThreshold <= 0) {
+      toast.error("Recognition threshold must be a valid number.");
+      return;
+    }
+    const thresholdValue = parsedThreshold <= 1 ? parsedThreshold : parsedThreshold / 100;
+    const minConfidence = Math.round(thresholdValue * 100);
+    const dedupeValue = Number(dedupeWindow);
+    const dedupeSeconds = Number.isFinite(dedupeValue) ? Math.max(0, dedupeValue) : 300;
+
+    await api.patch("/v1/config", {
+      items: [
+        { key: "recognition_threshold", value: thresholdValue },
+        { key: "rekognition_min_confidence", value: minConfidence },
+        { key: "dedupe_window_seconds", value: dedupeSeconds },
+        { key: "mnotify_sender_id", value: senderId || null },
+        { key: "enable_real_providers", value: enableRealProviders },
+      ],
+    });
+    await queryClient.invalidateQueries({ queryKey: ["config"] });
+    toast.success("Settings saved");
+    await markStepDone("settings");
   };
 
   const createLocation = async () => {
@@ -314,6 +387,9 @@ export default function OnboardingPage() {
       const form = new FormData();
       faces.forEach((file) => form.append("images", file));
       await api.post(`/v1/people/${person.id}/faces`, form, { headers: {} });
+      if (faces.length < 3) {
+        toast("We recommend uploading 3-6 images for best accuracy.");
+      }
     }
     toast.success("Person enrolled");
     await markStepDone("person");
@@ -330,7 +406,7 @@ export default function OnboardingPage() {
   };
 
   return (
-    <PermissionGate roles={["ChurchOwnerAdmin", "BranchAdmin"]}>
+    <PermissionGate permissions={["config.manage"]}>
       <PageShell
         title="Onboarding"
         description="Guided setup for your first service day."
@@ -408,6 +484,78 @@ export default function OnboardingPage() {
 
         <Card className="bg-card/90">
           <CardContent className="pt-6">
+            {activeStep === "settings" ? (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-lg font-semibold text-foreground">Preflight settings</p>
+                  <p className="text-sm text-muted-foreground">
+                    Configure recognition thresholds and messaging defaults before onboarding the team.
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Recognition threshold
+                    </label>
+                    <Input
+                      value={recognitionThreshold}
+                      onChange={(event) => setRecognitionThreshold(event.target.value)}
+                      placeholder="0.90"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Dedupe window (seconds)
+                    </label>
+                    <Input
+                      value={dedupeWindow}
+                      onChange={(event) => setDedupeWindow(event.target.value)}
+                      placeholder="300"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Sender ID
+                    </label>
+                    <Input
+                      value={senderId}
+                      onChange={(event) => setSenderId(event.target.value)}
+                      placeholder="MNotify sender id"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Provider mode
+                    </label>
+                    <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={enableRealProviders}
+                        onChange={(event) => setEnableRealProviders(event.target.checked)}
+                        className="h-4 w-4 rounded border-border"
+                      />
+                      <span>Enable real providers (Rekognition + mNotify)</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid gap-3 rounded-xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground md:grid-cols-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em]">Timezone</p>
+                    <p className="mt-1 font-semibold text-foreground">
+                      {String(configMap.timezone ?? "Africa/Accra")}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em]">Locale</p>
+                    <p className="mt-1 font-semibold text-foreground">
+                      {String(configMap.locale ?? "en-GH")}
+                    </p>
+                  </div>
+                </div>
+                <Button onClick={saveSettings}>Save settings</Button>
+              </div>
+            ) : null}
+
             {activeStep === "profile" ? (
               <div className="space-y-4">
                 <div>
@@ -581,6 +729,25 @@ export default function OnboardingPage() {
                   multiple
                   onChange={(event) => setFaces(Array.from(event.target.files ?? []))}
                 />
+                {faces.length > 0 ? (
+                  <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                    {faces.length < 3 ? (
+                      <p className="font-semibold text-amber-500">
+                        We recommend at least 3 images.
+                      </p>
+                    ) : null}
+                    {faceQualityHints.length > 0 ? (
+                      <ul className="mt-2 space-y-1">
+                        {faceQualityHints.map((hint) => (
+                          <li key={hint.fileName}>
+                            {hint.fileName}:{" "}
+                            {hint.warnings.length ? hint.warnings.join(", ") : "Looks good"}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
                 <Button onClick={enrollPerson}>Enroll person</Button>
               </div>
             ) : null}

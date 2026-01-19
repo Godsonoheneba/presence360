@@ -47,3 +47,30 @@ Add screenshots under `docs/screenshots/`:
 - `make dev-smoke` exercises tenant provisioning, routing, login, and mock messaging.
 - Onboarding wizard lives at `http://localhost:3000/onboarding`.
 - Run Playwright smoke tests with `npm run e2e` (requires web apps running).
+- Structured logs are written to `logs/dev-tenant-api.jsonl` and `logs/dev-control-plane-api.jsonl` in dev.
+  Use `make logs-tail` to stream them.
+
+## Real provider setup (AWS Rekognition + mNotify)
+Set these environment variables before starting the APIs:
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_REGION` (or `AWS_DEFAULT_REGION`)
+- `TENANT_SECRET_MNOTIFY_API_KEY` (or set `mnotify_api_key` in tenant_config secret ref)
+- `PROVIDER_MODE=auto` (default) or `PROVIDER_MODE=live`
+- `MESSAGING_MODE=mnotify`
+
+Quick test (replace IDs as needed):
+```bash
+curl -sS http://localhost:8000/healthz
+```
+
+If a provider is not configured, the API returns `503` with
+`{"error":"rekognition_not_configured","request_id":"..."}` or
+`{"error":"messaging_not_configured","request_id":"..."}`.
+
+### Real smoke test
+Place 3+ face images under `scripts/fixtures/real_faces/` (gitignored by default),
+then run:
+```bash
+make real-smoke
+```

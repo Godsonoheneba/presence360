@@ -38,6 +38,7 @@ def test_gate_frames_idempotency(monkeypatch, tenant_registry_payload):
     os.environ["ENV"] = "dev"
     os.environ["SECRET_STORE_BACKEND"] = "file"
     os.environ["SECRET_STORE_PATH"] = str(secret_file)
+    os.environ["PROVIDER_MODE"] = "mock"
     os.environ["GATE_BOOTSTRAP_TOKEN"] = "test-bootstrap"
     os.environ["GATE_FRAME_COOLDOWN_SECONDS"] = "0"
     get_settings.cache_clear()

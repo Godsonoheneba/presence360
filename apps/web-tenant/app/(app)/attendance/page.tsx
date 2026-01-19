@@ -17,9 +17,10 @@ import { Input } from "@/components/ui/input";
 import { PermissionGate } from "@/components/auth/permission-gate";
 import { api } from "@/lib/api";
 import { getActiveSessionId, setActiveSessionId } from "@/lib/active-session";
+import { formatSessionLabel } from "@/lib/format";
 import { generateId } from "@/lib/id";
 import { loadLocalItems, mergeById, upsertLocalItem } from "@/lib/local-store";
-import type { Service, ServiceSession } from "@/lib/types";
+import type { Location, Service, ServiceSession } from "@/lib/types";
 
 export default function AttendancePage() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -32,6 +33,10 @@ export default function AttendancePage() {
   const { data: servicesResponse } = useQuery({
     queryKey: ["services"],
     queryFn: () => api.get<{ items: Service[] }>("/v1/services"),
+  });
+  const { data: locationsResponse } = useQuery({
+    queryKey: ["locations"],
+    queryFn: () => api.get<{ items: Location[] }>("/v1/locations"),
   });
 
   const sessions = useMemo(
@@ -49,6 +54,32 @@ export default function AttendancePage() {
         loadLocalItems<Service>("services"),
       ),
     [servicesResponse?.items],
+  );
+  const locations = useMemo(
+    () =>
+      mergeById<Location>(
+        locationsResponse?.items ?? [],
+        loadLocalItems<Location>("locations"),
+      ),
+    [locationsResponse?.items],
+  );
+
+  const serviceMap = useMemo(
+    () => Object.fromEntries(services.map((service) => [service.id, service])),
+    [services],
+  );
+  const locationMap = useMemo(
+    () => Object.fromEntries(locations.map((location) => [location.id, location])),
+    [locations],
+  );
+
+  const sessionRows = useMemo(
+    () =>
+      sessions.map((session) => ({
+        ...session,
+        label: formatSessionLabel(session, serviceMap, locationMap),
+      })),
+    [sessions, serviceMap, locationMap],
   );
 
   const startSession = useMutation({
@@ -77,7 +108,7 @@ export default function AttendancePage() {
   });
 
   return (
-    <PermissionGate permissions={["attendance.read"]}>
+    <PermissionGate permissions={["reports.read"]}>
       <PageShell
         title="Attendance"
         description="Active sessions and attendance rollups by service."
@@ -108,8 +139,9 @@ export default function AttendancePage() {
             />
           ) : (
             <DataTable
+              searchKeys={["label", "status"]}
               columns={[
-                { key: "id", header: "Session" },
+                { key: "label", header: "Session" },
                 {
                   key: "status",
                   header: "Status",
@@ -119,25 +151,32 @@ export default function AttendancePage() {
                     </Badge>
                   ),
                 },
+              ]}
+              data={sessionRows}
+              rowActions={(row) => [
+                { label: "View session", href: `/sessions/${row.id}` },
                 {
-                  key: "id",
-                  header: "",
-                  render: (value) => (
-                    <Link
-                      href={`/sessions/${value}`}
-                      className="text-xs font-semibold text-primary hover:underline"
-                    >
-                      View
-                    </Link>
-                  ),
+                  label: "Set active session",
+                  onClick: () => setActiveSessionId(String(row.id)),
+                },
+                {
+                  label: "Copy session id",
+                  onClick: () => navigator.clipboard.writeText(String(row.id)),
                 },
               ]}
-              data={sessions}
             />
           )}
           {sessions.length > 0 ? (
             <div className="mt-4 text-xs text-muted-foreground">
-              Active session: {getActiveSessionId() ?? "None"}
+              Active session:{" "}
+              {(() => {
+                const activeId = getActiveSessionId();
+                if (!activeId) {
+                  return "None";
+                }
+                const match = sessionRows.find((row) => row.id === activeId);
+                return match?.label ?? activeId;
+              })()}
             </div>
           ) : null}
         </CardContent>
@@ -161,6 +200,9 @@ export default function AttendancePage() {
               {services.map((service) => (
                 <option key={service.id} value={service.id}>
                   {service.name ?? service.id}
+                  {service.location_id && locationMap[service.location_id]
+                    ? ` — ${locationMap[service.location_id].name ?? "Location"}`
+                    : ""}
                 </option>
               ))}
             </select>

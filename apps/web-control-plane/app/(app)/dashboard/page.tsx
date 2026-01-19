@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard } from "@/components/ui/stat-card";
 import { api } from "@/lib/api";
+import { formatDateTime } from "@/lib/format";
 import type { Tenant } from "@/lib/types";
 
 function buildSeries(values: Tenant[]) {
@@ -26,7 +27,7 @@ function buildSeries(values: Tenant[]) {
     });
   }
   return values.slice(0, 6).map((tenant, index) => ({
-    label: tenant.slug ?? `T${index + 1}`,
+    label: tenant.slug ?? tenant.name ?? `Tenant ${index + 1}`,
     value: index + 1,
   }));
 }
@@ -102,8 +103,12 @@ export default function ControlDashboard() {
                   className="flex items-center justify-between rounded-lg border border-border bg-muted/40 p-3 text-sm"
                 >
                   <div>
-                    <p className="font-semibold text-foreground">{tenant.slug ?? tenant.id}</p>
-                    <p className="text-xs text-muted-foreground">{tenant.name ?? "Tenant"}</p>
+                    <p className="font-semibold text-foreground">
+                      {tenant.name ?? tenant.slug ?? "Tenant"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {tenant.slug ?? "no slug"}
+                    </p>
                   </div>
                   <Badge variant={tenant.provisioning_state === "active" ? "success" : "default"}>
                     {tenant.provisioning_state ?? "unknown"}
@@ -132,8 +137,12 @@ export default function ControlDashboard() {
                   className="flex items-center justify-between rounded-lg border border-border bg-muted/40 p-3 text-sm"
                 >
                   <div>
-                    <p className="font-semibold text-foreground">{tenant.slug ?? tenant.id}</p>
-                    <p className="text-xs text-muted-foreground">Tenant created</p>
+                    <p className="font-semibold text-foreground">
+                      {tenant.name ?? tenant.slug ?? "Tenant"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDateTime(tenant.created_at) || "Tenant created"}
+                    </p>
                   </div>
                   <Badge variant="default">Provisioned</Badge>
                 </div>

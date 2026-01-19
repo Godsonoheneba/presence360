@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 import uuid
 from typing import Any
@@ -12,7 +13,7 @@ from sqlalchemy.orm import Session
 from .auth import get_internal_service, get_super_admin
 from .config import get_settings
 from .db import get_session
-from .logging_utils import clear_log_context, configure_logging, set_log_context
+from .logging_utils import clear_log_context, configure_logging, get_request_id, set_log_context
 from .metrics import metrics_response, observe_request
 from .models import Tenant, TenantDbConnection
 from .otel import setup_otel
@@ -20,7 +21,14 @@ from .provisioning import ProvisioningError, get_provisioner
 from .schemas import TenantCreateRequest, TenantProvisionResponse, TenantRegistryResponse
 
 settings = get_settings()
-configure_logging("control-plane-api", settings.log_level, settings.log_json)
+log_file_path = settings.log_file_path or os.path.join("logs", "dev-control-plane-api.jsonl")
+configure_logging(
+    "control-plane-api",
+    settings.log_level,
+    settings.log_json,
+    log_to_file=settings.log_to_file and settings.env == "dev",
+    log_file_path=log_file_path,
+)
 logger = logging.getLogger(__name__)
 setup_otel("control-plane-api")
 if settings.env != "dev" and settings.auth_mode == "dev":
@@ -82,6 +90,7 @@ async def request_size_middleware(request: Request, call_next):
 @app.middleware("http")
 async def request_context_middleware(request: Request, call_next):
     request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    request.state.request_id = request_id
     set_log_context(request_id=request_id)
     start = time.monotonic()
     status_code = 500
@@ -104,13 +113,32 @@ async def request_context_middleware(request: Request, call_next):
             extra={
                 "method": request.method,
                 "path": request.url.path,
-                "status": status_code,
-                "duration_ms": int(duration * 1000),
+                "status_code": status_code,
+                "latency_ms": int(duration * 1000),
             },
         )
         clear_log_context()
         if response is not None:
             response.headers["X-Request-Id"] = request_id
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    request_id = getattr(request.state, "request_id", None) or get_request_id() or str(uuid.uuid4())
+    logger.exception(
+        "request.unhandled_exception",
+        extra={"method": request.method, "path": request.url.path},
+    )
+    response = JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_error",
+            "request_id": request_id,
+            "message": "See logs",
+        },
+    )
+    response.headers["X-Request-Id"] = request_id
+    return response
 
 
 @app.middleware("http")
@@ -138,6 +166,7 @@ def metrics():
 
 @router.post("/tenants", response_model=TenantProvisionResponse)
 def create_tenant(
+    request: Request,
     payload: TenantCreateRequest,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     session: Session = Depends(get_session),
@@ -152,7 +181,22 @@ def create_tenant(
             idempotency_key=idempotency_key,
         )
     except ProvisioningError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+        message = str(exc)
+        if message.startswith("rekognition_not_configured"):
+            request_id = getattr(request.state, "request_id", None) or get_request_id() or str(
+                uuid.uuid4()
+            )
+            response = JSONResponse(
+                status_code=exc.status_code,
+                content={
+                    "error": "rekognition_not_configured",
+                    "request_id": request_id,
+                    "message": message,
+                },
+            )
+            response.headers["X-Request-Id"] = request_id
+            return response
+        raise HTTPException(status_code=exc.status_code, detail=message) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)

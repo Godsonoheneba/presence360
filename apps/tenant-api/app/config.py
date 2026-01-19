@@ -12,11 +12,11 @@ class Settings(BaseSettings):
     secret_store_backend: str = "env"
     secret_store_path: str = ".secrets/tenant_db.json"
     tenant_registry_cache_ttl_seconds: int = 30
-    provider_mode: str = "mock"
-    rekognition_mode: str = "mock"
+    provider_mode: str = "auto"
+    rekognition_mode: str = "aws"
     rekognition_region: str = "us-east-1"
     mock_face_confidence: float = 99.0
-    messaging_mode: str = "mock"
+    messaging_mode: str = "mnotify"
     mnotify_base_url: str = "https://api.mnotify.com/api"
     mnotify_timeout_seconds: float = 10.0
     phone_encryption_key: str = ""
@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     max_request_size_bytes: int = 10_000_000
     log_level: str = "INFO"
     log_json: bool = True
+    log_to_file: bool = False
+    log_file_path: str = ""
     metrics_enabled: bool = True
     metrics_port: int = 9101
     otel_enabled: bool = False

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   CalendarDays,
   ClipboardList,
@@ -13,11 +13,13 @@ import {
   Workflow,
   Activity,
   FileText,
+  ShieldCheck,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { hasAccess } from "@/lib/permissions";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 type NavItem = {
   title: string;
@@ -41,7 +43,7 @@ const navSections: NavSection[] = [
         title: "Live attendance",
         href: "/live-attendance",
         icon: Activity,
-        permissions: ["attendance.read"],
+        permissions: ["services.manage"],
       },
     ],
   },
@@ -52,19 +54,19 @@ const navSections: NavSection[] = [
         title: "Services",
         href: "/services",
         icon: MonitorPlay,
-        permissions: ["services.read"],
+        permissions: ["services.manage"],
       },
       {
         title: "Sessions",
         href: "/sessions",
         icon: ClipboardList,
-        permissions: ["attendance.read"],
+        permissions: ["services.manage"],
       },
       {
         title: "Attendance",
         href: "/attendance",
         icon: Activity,
-        permissions: ["attendance.read"],
+        permissions: ["reports.read"],
       },
     ],
   },
@@ -81,7 +83,7 @@ const navSections: NavSection[] = [
         title: "Follow-ups",
         href: "/followups",
         icon: CalendarDays,
-        permissions: ["followups.read"],
+        permissions: ["followups.manage"],
       },
     ],
   },
@@ -92,19 +94,19 @@ const navSections: NavSection[] = [
         title: "Messages",
         href: "/messages",
         icon: MessageSquare,
-        permissions: ["messages.read"],
+        permissions: ["messages.send"],
       },
       {
         title: "Templates",
         href: "/templates",
         icon: FileText,
-        permissions: ["messages.manage"],
+        permissions: ["messages.send"],
       },
       {
         title: "Rules",
         href: "/rules",
         icon: Workflow,
-        permissions: ["rules.read"],
+        permissions: ["config.manage"],
       },
     ],
   },
@@ -115,13 +117,25 @@ const navSections: NavSection[] = [
         title: "Onboarding",
         href: "/onboarding",
         icon: Settings,
-        roles: ["ChurchOwnerAdmin", "BranchAdmin"],
+        permissions: ["config.manage"],
       },
       {
         title: "Settings",
         href: "/settings",
         icon: Settings,
-        roles: ["ChurchOwnerAdmin", "BranchAdmin"],
+        permissions: ["config.manage"],
+      },
+      {
+        title: "Users",
+        href: "/users",
+        icon: Users,
+        permissions: ["users.manage"],
+      },
+      {
+        title: "Roles & permissions",
+        href: "/roles",
+        icon: ShieldCheck,
+        permissions: ["users.manage"],
       },
     ],
   },
@@ -135,17 +149,14 @@ export function SidebarNav({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { user } = useAuth();
 
   return (
+    <TooltipProvider>
     <nav className="flex-1 space-y-6 px-3 pb-6">
       {navSections.map((section) => {
-        const items = section.items.filter((item) =>
-          hasAccess(user, { permissions: item.permissions, roles: item.roles }),
-        );
-        if (items.length === 0) {
-          return null;
-        }
+        const items = section.items;
         return (
           <div key={section.label} className="space-y-2">
             {!collapsed ? (
@@ -157,14 +168,30 @@ export function SidebarNav({
               {items.map((item) => {
                 const active = pathname === item.href;
                 const Icon = item.icon;
-                return (
+                const canAccess = hasAccess(user, { permissions: item.permissions, roles: item.roles });
+                const requires = [
+                  ...(item.permissions ?? []),
+                  ...(item.roles ?? []).map((role) => `role ${role}`),
+                ];
+                const content = (
                   <Link
                     key={item.href}
                     href={item.href}
-                    onClick={onNavigate}
+                    aria-label={item.title}
+                    onClick={(event) => {
+                      if (!canAccess) {
+                        event.preventDefault();
+                        return;
+                      }
+                      onNavigate?.();
+                    }}
+                    onMouseEnter={() => router.prefetch(item.href)}
+                    aria-disabled={!canAccess}
                     className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors",
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                       active && "bg-muted text-foreground",
+                      !active && "text-muted-foreground hover:text-foreground",
+                      !canAccess && "cursor-not-allowed opacity-50 hover:text-muted-foreground",
                       collapsed && "justify-center",
                     )}
                     title={collapsed ? item.title : undefined}
@@ -173,11 +200,23 @@ export function SidebarNav({
                     {!collapsed ? item.title : null}
                   </Link>
                 );
+                if (canAccess) {
+                  return content;
+                }
+                return (
+                  <Tooltip key={item.href}>
+                    <TooltipTrigger asChild>{content}</TooltipTrigger>
+                    <TooltipContent>
+                      Requires {requires.length ? requires.join(", ") : "additional access"}
+                    </TooltipContent>
+                  </Tooltip>
+                );
               })}
             </div>
           </div>
         );
       })}
     </nav>
+    </TooltipProvider>
   );
 }

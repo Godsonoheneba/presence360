@@ -37,7 +37,7 @@ class FileSecretStore:
             except json.JSONDecodeError as exc:  # noqa: PERF203
                 raise SecretStoreError("Secret store is invalid", status_code=500) from exc
         if secret_ref not in data:
-            raise SecretStoreError("Secret ref not found", status_code=404)
+            raise SecretStoreError(f"Secret ref not found: {secret_ref}", status_code=404)
         return _extract_secret_value(data.get(secret_ref))
 
 
@@ -54,7 +54,7 @@ class EnvSecretStore:
                 return value
         if self.fallback_store is not None:
             return self.fallback_store.get(secret_ref)
-        raise SecretStoreError("Secret ref not found", status_code=404)
+        raise SecretStoreError(f"Secret ref not found: {secret_ref}", status_code=404)
 
 
 def _env_key_from_ref(secret_ref: str, prefix: str) -> str | None:

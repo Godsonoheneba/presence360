@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { PlayCircle, PlusCircle } from "lucide-react";
+import { PlusCircle } from "lucide-react";
 
 import { PageShell } from "@/components/layout/page-shell";
 import { DataTable } from "@/components/tables/data-table";
@@ -71,7 +71,7 @@ export default function ServicesPage() {
   });
 
   return (
-    <PermissionGate permissions={["services.read"]}>
+    <PermissionGate permissions={["services.manage"]}>
       <PageShell
         title="Services"
         description="Define recurring services and launch sessions instantly."
@@ -93,6 +93,7 @@ export default function ServicesPage() {
             />
           ) : (
             <DataTable
+              searchKeys={["name", "id"]}
               columns={[
                 { key: "name", header: "Service" },
                 {
@@ -100,22 +101,18 @@ export default function ServicesPage() {
                   header: "Status",
                   render: () => <Badge variant="default">Ready</Badge>,
                 },
-                {
-                  key: "id",
-                  header: "",
-                  render: (value) => (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => startNow.mutate(String(value))}
-                    >
-                      <PlayCircle className="h-4 w-4" />
-                      Start now
-                    </Button>
-                  ),
-                },
               ]}
               data={services}
+              rowActions={(row) => [
+                {
+                  label: "Start session",
+                  onClick: () => startNow.mutate(String(row.id)),
+                },
+                {
+                  label: "Copy service id",
+                  onClick: () => navigator.clipboard.writeText(String(row.id)),
+                },
+              ]}
             />
           )}
         </CardContent>

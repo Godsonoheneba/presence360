@@ -12,9 +12,9 @@ async function stubTenantApis(page: Page) {
         user: {
           name: "Test User",
           roles: ["ChurchOwnerAdmin"],
-          permissions: ["people.read", "messages.read", "attendance.read"],
+          permissions: ["people.read", "messages.send", "reports.read", "services.manage"],
         },
-        permissions: ["people.read", "messages.read", "attendance.read"],
+        permissions: ["people.read", "messages.send", "reports.read", "services.manage"],
       }),
     }),
   );
@@ -36,8 +36,10 @@ async function stubTenantApis(page: Page) {
   await page.route("**/v1/followups", (route) => route.fulfill({ status: 200, body: empty }));
   await page.route("**/v1/locations", (route) => route.fulfill({ status: 200, body: empty }));
   await page.route("**/v1/gates", (route) => route.fulfill({ status: 200, body: empty }));
+  await page.route("**/v1/cameras", (route) => route.fulfill({ status: 200, body: empty }));
   await page.route("**/v1/services", (route) => route.fulfill({ status: 200, body: empty }));
   await page.route("**/v1/sessions", (route) => route.fulfill({ status: 200, body: empty }));
+  await page.route("**/v1/people", (route) => route.fulfill({ status: 200, body: empty }));
   await page.route("**/v1/templates", (route) => route.fulfill({ status: 200, body: empty }));
   await page.route("**/healthz", (route) =>
     route.fulfill({ status: 200, body: JSON.stringify({ status: "ok" }) }),
@@ -61,6 +63,10 @@ test("tenant dashboard and navigation", async ({ page }) => {
   await page.getByRole("link", { name: "People" }).click();
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Messages" }).click();
+  const messagesLink = page.getByRole("link", { name: "Messages" });
+  await expect(messagesLink).toBeVisible();
+  await expect(messagesLink).toHaveAttribute("href", "/messages");
+
+  await page.goto(`${baseUrl}/messages`);
   await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
 });

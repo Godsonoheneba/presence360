@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
+import { formatDateTime } from "@/lib/format";
 import { isDev } from "@/lib/env";
 import type { Tenant } from "@/lib/types";
 
@@ -64,7 +65,7 @@ export default function TenantDetailPage() {
       breadcrumbs={[
         { label: "Dashboard", href: "/dashboard" },
         { label: "Tenants", href: "/tenants" },
-        { label: tenantId },
+        { label: tenant?.name ?? tenant?.slug ?? "Tenant" },
       ]}
       action={
         <Button asChild variant="outline">
@@ -90,12 +91,21 @@ export default function TenantDetailPage() {
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Tenant ID</p>
-                    <p className="mt-2 text-sm font-semibold text-foreground">{tenant.id}</p>
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Tenant</p>
+                    <p className="mt-2 text-sm font-semibold text-foreground">
+                      {tenant.name ?? "Tenant"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{tenant.slug ?? "-"}</p>
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Slug</p>
-                    <p className="mt-2 text-sm text-muted-foreground">{tenant.slug ?? "-"}</p>
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Created</p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {formatDateTime(tenant.created_at)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Tenant ID</p>
+                    <p className="mt-2 text-sm text-muted-foreground">{tenant.id}</p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Status</p>

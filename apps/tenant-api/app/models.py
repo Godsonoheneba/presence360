@@ -63,6 +63,18 @@ class UserRole(Base):
     is_active = Column(Boolean, nullable=False, default=True)
 
 
+class UserLocationScope(Base):
+    __tablename__ = "user_location_scopes"
+    __table_args__ = (
+        Index("uq_user_location_scope", "user_id", "location_id", unique=True),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    location_id = Column(String(64), nullable=False)
+    assigned_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class TenantConfig(Base):
     __tablename__ = "tenant_config"
 

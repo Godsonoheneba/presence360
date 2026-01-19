@@ -13,7 +13,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RoleGate } from "@/components/auth/role-gate";
 import { api } from "@/lib/api";
-import type { FollowupTask } from "@/lib/types";
+import { formatDateTime } from "@/lib/format";
+import type { FollowupTask, Person } from "@/lib/types";
 
 export default function FollowupDetailPage() {
   const params = useParams();
@@ -23,8 +24,17 @@ export default function FollowupDetailPage() {
     queryKey: ["followups"],
     queryFn: () => api.get<{ items: FollowupTask[] }>("/v1/followups"),
   });
+  const { data: peopleResponse } = useQuery({
+    queryKey: ["people"],
+    queryFn: () => api.get<{ items: Person[] }>("/v1/people"),
+  });
 
   const task = followupsResponse?.items?.find((item) => item.id === taskId) ?? null;
+  const peopleMap = (peopleResponse?.items ?? []).reduce<Record<string, Person>>((acc, person) => {
+    acc[person.id] = person;
+    return acc;
+  }, {});
+  const personLabel = task?.person_id ? peopleMap[task.person_id]?.full_name : null;
 
   const markResolved = useMutation({
     mutationFn: async () => api.patch(`/v1/followups/${taskId}`, { status: "resolved" }),
@@ -39,7 +49,7 @@ export default function FollowupDetailPage() {
       breadcrumbs={[
         { label: "Dashboard", href: "/" },
         { label: "Follow-ups", href: "/followups" },
-        { label: taskId },
+        { label: personLabel ?? "Follow-up" },
       ]}
       action={
         <div className="flex gap-2">
@@ -71,20 +81,22 @@ export default function FollowupDetailPage() {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Due</p>
-                <p className="mt-2 text-sm text-muted-foreground">{task.due_at ?? "-"}</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {formatDateTime(task.due_at)}
+                </p>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Priority</p>
                 <p className="mt-2 text-sm text-muted-foreground">{task.priority ?? "-"}</p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Person ID</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Person</p>
                 {task.person_id ? (
                   <Link
                     href={`/people/${task.person_id}`}
                     className="mt-2 inline-flex text-xs font-semibold text-primary"
                   >
-                    View person
+                    {personLabel ?? "View person"}
                   </Link>
                 ) : (
                   <p className="mt-2 text-xs text-muted-foreground">-</p>

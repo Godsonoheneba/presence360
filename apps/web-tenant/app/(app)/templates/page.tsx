@@ -59,7 +59,7 @@ export default function TemplatesPage() {
   });
 
   return (
-    <PermissionGate permissions={["messages.manage"]}>
+    <PermissionGate permissions={["messages.send"]}>
       <PageShell
         title="Templates"
         description="Reusable SMS templates for welcome and absence rules."
@@ -80,6 +80,7 @@ export default function TemplatesPage() {
             />
           ) : (
             <DataTable
+              searchKeys={["name", "body"]}
               columns={[
                 { key: "name", header: "Name" },
                 { key: "channel", header: "Channel" },
@@ -95,6 +96,13 @@ export default function TemplatesPage() {
                 { key: "body", header: "Body" },
               ]}
               data={templates}
+              rowActions={(row) => [
+                {
+                  label: "Copy template name",
+                  onClick: () => navigator.clipboard.writeText(row.name ?? ""),
+                  disabled: !row.name,
+                },
+              ]}
             />
           )}
         </CardContent>

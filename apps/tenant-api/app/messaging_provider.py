@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import time
 from dataclasses import dataclass
 from typing import Protocol
@@ -8,6 +9,14 @@ from typing import Protocol
 import httpx
 
 from .config import get_settings
+
+logger = logging.getLogger(__name__)
+
+
+class MessagingNotConfiguredError(RuntimeError):
+    def __init__(self, message: str = "messaging_not_configured") -> None:
+        super().__init__(message)
+        self.error_code = message
 
 
 @dataclass(frozen=True)
@@ -82,8 +91,12 @@ class MNotifyProvider:
             attempts += 1
             try:
                 response = self._client.post("/sms/quick", data=payload)
-            except httpx.RequestError:
+            except httpx.RequestError as exc:
                 error_code = "timeout"
+                logger.warning(
+                    "mnotify.request_error",
+                    extra={"error_type": exc.__class__.__name__, "retryable": True},
+                )
                 time.sleep(0.5 * attempts)
                 continue
             raw = _sanitize_response(response)
@@ -98,12 +111,24 @@ class MNotifyProvider:
                 )
             if response.status_code in {400, 401, 403}:
                 error_code = "rejected"
+                logger.warning(
+                    "mnotify.rejected",
+                    extra={"status_code": response.status_code, "retryable": False},
+                )
                 break
             if response.status_code == 429 or response.status_code >= 500:
                 error_code = "retryable_error"
+                logger.warning(
+                    "mnotify.retryable_error",
+                    extra={"status_code": response.status_code, "retryable": True},
+                )
                 time.sleep(0.5 * attempts)
                 continue
             error_code = "unknown_error"
+            logger.warning(
+                "mnotify.unknown_error",
+                extra={"status_code": response.status_code, "retryable": False},
+            )
             break
         return MessagingResult(
             status="failed",
@@ -130,11 +155,9 @@ def _sanitize_response(response: httpx.Response) -> dict:
 
 def get_messaging_provider() -> MessagingProvider:
     settings = get_settings()
-    if settings.provider_mode != "live":
+    if settings.provider_mode.lower() == "mock":
         return MockMessagingProvider()
-    if settings.messaging_mode == "mnotify":
-        return MNotifyProvider(
-            base_url=settings.mnotify_base_url,
-            timeout_seconds=settings.mnotify_timeout_seconds,
-        )
-    return MockMessagingProvider()
+    return MNotifyProvider(
+        base_url=settings.mnotify_base_url,
+        timeout_seconds=settings.mnotify_timeout_seconds,
+    )

@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     secret_store_backend: str = "env"
     secret_store_path: str = ".secrets/tenant_db.json"
     tenant_db_password_ref: str = "tenant_db_password"
-    rekognition_mode: str = "mock"
+    rekognition_mode: str = "aws"
     rekognition_region: str = "us-east-1"
     internal_token: str = ""
     auth_mode: str = "dev"
@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     max_request_size_bytes: int = 5_000_000
     log_level: str = "INFO"
     log_json: bool = True
+    log_to_file: bool = False
+    log_file_path: str = ""
     metrics_enabled: bool = True
     otel_enabled: bool = False
     otel_service_name: str = "control-plane-api"

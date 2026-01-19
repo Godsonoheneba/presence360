@@ -78,6 +78,8 @@ export type RecognitionResult = {
   person_id?: string | null;
   decision?: string;
   best_confidence?: number | null;
+  best_face_id?: string | null;
+  rejection_reason?: string | null;
   processed_at?: string;
 };
 
@@ -116,4 +118,26 @@ export type FollowupTask = {
   status?: string;
   priority?: string | null;
   due_at?: string | null;
+};
+
+export type User = {
+  id: string;
+  email: string;
+  status?: string;
+  roles?: string[];
+  location_ids?: string[];
+  created_at?: string | null;
+};
+
+export type Role = {
+  id: string;
+  name: string;
+  description?: string | null;
+  permissions?: string[];
+};
+
+export type Permission = {
+  id: string;
+  name: string;
+  description?: string | null;
 };

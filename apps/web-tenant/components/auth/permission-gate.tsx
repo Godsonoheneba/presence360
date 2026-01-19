@@ -17,7 +17,10 @@ export function PermissionGate({
   roles?: string[];
   fallback?: ReactNode;
 }) {
-  const { user } = useAuth();
+  const { user, status } = useAuth();
+  if (status === "loading") {
+    return <>{fallback ?? null}</>;
+  }
   if (!hasAccess(user, { permissions, roles })) {
     return <>{fallback ?? <ForbiddenState />}</>;
   }

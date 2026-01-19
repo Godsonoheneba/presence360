@@ -16,6 +16,7 @@ os.environ["GATE_BOOTSTRAP_TOKEN"] = os.environ.get("GATE_BOOTSTRAP_TOKEN", "tes
 os.environ["GATE_FRAME_COOLDOWN_SECONDS"] = "0"
 os.environ["CELERY_TASK_ALWAYS_EAGER"] = "true"
 os.environ["CELERY_TASK_EAGER_PROPAGATES"] = "true"
+os.environ["PROVIDER_MODE"] = "mock"
 os.environ["REKOGNITION_MODE"] = "mock"
 os.environ["MOCK_FACE_CONFIDENCE"] = os.environ.get("MOCK_FACE_CONFIDENCE", "99")
 os.environ["METRICS_ENABLED"] = "false"
